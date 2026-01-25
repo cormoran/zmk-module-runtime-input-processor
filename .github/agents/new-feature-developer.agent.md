@@ -1,3 +1,8 @@
+---
+name: new-feature-developer
+description: New feature developer
+---
+
 This repository contains a template for a ZMK module with Web UI by using
 **unofficial** custom zmk studio rpc protocol.
 
