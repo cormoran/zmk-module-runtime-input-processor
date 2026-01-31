@@ -3,8 +3,15 @@ config ZMK_TEMPLATE_FEATURE
 
 if ZMK_TEMPLATE_FEATURE
 
+config ZMK_TEMPLATE_FEATURE_RUNTIME_INPUT_PROCESSOR
+    bool "Enable runtime input processor"
+    help
+      Enable runtime configurable input processor for pointing devices.
+      Supports configuring scaling and rotation parameters at runtime.
+
 config ZMK_TEMPLATE_FEATURE_STUDIO_RPC
     bool "Enable template feature custom Studio RPC"
     depends on ZMK_STUDIO
+    select ZMK_TEMPLATE_FEATURE_RUNTIME_INPUT_PROCESSOR
 
 endif

@@ -3,10 +3,13 @@
 # Include directories
 zephyr_include_directories(include)
 if(CONFIG_ZMK_TEMPLATE_FEATURE)
-    # target_sources(app PRIVATE ...)
+    # Add runtime input processor source
+    if(CONFIG_ZMK_TEMPLATE_FEATURE_RUNTIME_INPUT_PROCESSOR)
+        target_sources(app PRIVATE src/pointing/input_processor_runtime.c)
+    endif()
 
     if(CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC)
-        file(GLOB_RECURSE C_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
+        file(GLOB_RECURSE C_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/studio/*.c)
         target_sources(app PRIVATE ${C_FILES})
 
         list(APPEND CMAKE_MODULE_PATH ${ZEPHYR_BASE}/modules/nanopb)
@@ -27,3 +30,4 @@ if(CONFIG_ZMK_TEMPLATE_FEATURE)
         add_dependencies(app ${ZEPHYR_CURRENT_LIBRARY})
     endif()
 endif()
+

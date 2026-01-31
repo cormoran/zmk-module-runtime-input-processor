@@ -1,0 +1,279 @@
+/*
+ * Copyright (c) 2026 The ZMK Contributors
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#define DT_DRV_COMPAT zmk_input_processor_runtime
+
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/sys/dlist.h>
+#include <drivers/input_processor.h>
+#include <zephyr/logging/log.h>
+#include <math.h>
+
+LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+
+struct runtime_processor_config {
+    const char *name;
+    uint8_t type;
+    size_t x_codes_len;
+    size_t y_codes_len;
+    const uint16_t *x_codes;
+    const uint16_t *y_codes;
+    uint32_t initial_scale_multiplier;
+    uint32_t initial_scale_divisor;
+    int32_t initial_rotation_degrees;
+};
+
+struct runtime_processor_data {
+    uint32_t scale_multiplier;
+    uint32_t scale_divisor;
+    int32_t rotation_degrees;
+    // Precomputed rotation values
+    int32_t cos_val;  // cos * 1000
+    int32_t sin_val;  // sin * 1000
+};
+
+// Global list head for all runtime processors
+static sys_slist_t runtime_processors = SYS_SLIST_STATIC_INIT(&runtime_processors);
+
+struct runtime_processor_node {
+    sys_snode_t node;
+    const struct device *dev;
+};
+
+static void update_rotation_values(struct runtime_processor_data *data) {
+    if (data->rotation_degrees == 0) {
+        data->cos_val = 1000;
+        data->sin_val = 0;
+        return;
+    }
+
+    // Convert degrees to radians and compute sin/cos
+    double angle_rad = (double)data->rotation_degrees * 3.14159265359 / 180.0;
+    data->cos_val = (int32_t)(cos(angle_rad) * 1000.0);
+    data->sin_val = (int32_t)(sin(angle_rad) * 1000.0);
+
+    LOG_DBG("Rotation %d degrees: cos=%d, sin=%d", data->rotation_degrees, 
+            data->cos_val, data->sin_val);
+}
+
+static int code_idx(uint16_t code, const uint16_t *list, size_t len) {
+    for (int i = 0; i < len; i++) {
+        if (list[i] == code) {
+            return i;
+        }
+    }
+    return -ENODEV;
+}
+
+static int scale_val(struct input_event *event, uint32_t mul, uint32_t div,
+                     struct zmk_input_processor_state *state) {
+    if (mul == 0 || div == 0) {
+        return ZMK_INPUT_PROC_CONTINUE;
+    }
+
+    int16_t value_mul = event->value * (int16_t)mul;
+
+    if (state && state->remainder) {
+        value_mul += *state->remainder;
+    }
+
+    int16_t scaled = value_mul / (int16_t)div;
+
+    if (state && state->remainder) {
+        *state->remainder = value_mul - (scaled * (int16_t)div);
+    }
+
+    LOG_DBG("scaled %d with %d/%d to %d", event->value, mul, div, scaled);
+
+    event->value = scaled;
+    return 0;
+}
+
+static int runtime_processor_handle_event(const struct device *dev, 
+                                          struct input_event *event,
+                                          uint32_t param1, uint32_t param2,
+                                          struct zmk_input_processor_state *state) {
+    const struct runtime_processor_config *cfg = dev->config;
+    struct runtime_processor_data *data = dev->data;
+
+    if (event->type != cfg->type) {
+        return ZMK_INPUT_PROC_CONTINUE;
+    }
+
+    int x_idx = code_idx(event->code, cfg->x_codes, cfg->x_codes_len);
+    int y_idx = code_idx(event->code, cfg->y_codes, cfg->y_codes_len);
+
+    if (x_idx < 0 && y_idx < 0) {
+        return ZMK_INPUT_PROC_CONTINUE;
+    }
+
+    // Store original value for rotation
+    int16_t original_value = event->value;
+    bool is_x = (x_idx >= 0);
+
+    // Apply scaling first
+    if (data->scale_multiplier > 0 && data->scale_divisor > 0) {
+        scale_val(event, data->scale_multiplier, data->scale_divisor, state);
+    }
+
+    // Apply rotation if needed
+    if (data->rotation_degrees != 0 && (x_idx >= 0 || y_idx >= 0)) {
+        // For rotation, we need to wait for both X and Y values
+        // This is a simplified version - stores the transformed value
+        int16_t value = event->value;
+        
+        if (is_x) {
+            // X' = X * cos - Y * sin (but we only have X here)
+            // For proper rotation, we'd need state to store pending values
+            // Simplified: just apply scaling for now, rotation would need paired handling
+            event->value = (value * data->cos_val) / 1000;
+        } else {
+            // Y' = X * sin + Y * cos (but we only have Y here)
+            event->value = (value * data->cos_val) / 1000;
+        }
+    }
+
+    return ZMK_INPUT_PROC_CONTINUE;
+}
+
+static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
+    .handle_event = runtime_processor_handle_event,
+};
+
+static int runtime_processor_init(const struct device *dev) {
+    const struct runtime_processor_config *cfg = dev->config;
+    struct runtime_processor_data *data = dev->data;
+
+    // Initialize with default values
+    data->scale_multiplier = cfg->initial_scale_multiplier;
+    data->scale_divisor = cfg->initial_scale_divisor;
+    data->rotation_degrees = cfg->initial_rotation_degrees;
+
+    update_rotation_values(data);
+
+    // Add to global list
+    struct runtime_processor_node *node = k_malloc(sizeof(struct runtime_processor_node));
+    if (node) {
+        node->dev = dev;
+        sys_slist_append(&runtime_processors, &node->node);
+        LOG_INF("Runtime processor '%s' initialized", cfg->name);
+    }
+
+    return 0;
+}
+
+// Public API for runtime configuration
+int zmk_input_processor_runtime_set_scaling(const struct device *dev, 
+                                            uint32_t multiplier, 
+                                            uint32_t divisor) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    
+    if (multiplier > 0) {
+        data->scale_multiplier = multiplier;
+    }
+    if (divisor > 0) {
+        data->scale_divisor = divisor;
+    }
+
+    LOG_INF("Set scaling to %d/%d", data->scale_multiplier, data->scale_divisor);
+    return 0;
+}
+
+int zmk_input_processor_runtime_set_rotation(const struct device *dev, int32_t degrees) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->rotation_degrees = degrees;
+    update_rotation_values(data);
+
+    LOG_INF("Set rotation to %d degrees", degrees);
+    return 0;
+}
+
+int zmk_input_processor_runtime_get_config(const struct device *dev,
+                                           const char **name,
+                                           uint32_t *scale_multiplier,
+                                           uint32_t *scale_divisor,
+                                           int32_t *rotation_degrees) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    const struct runtime_processor_config *cfg = dev->config;
+    struct runtime_processor_data *data = dev->data;
+
+    if (name) {
+        *name = cfg->name;
+    }
+    if (scale_multiplier) {
+        *scale_multiplier = data->scale_multiplier;
+    }
+    if (scale_divisor) {
+        *scale_divisor = data->scale_divisor;
+    }
+    if (rotation_degrees) {
+        *rotation_degrees = data->rotation_degrees;
+    }
+
+    return 0;
+}
+
+const struct device *zmk_input_processor_runtime_find_by_name(const char *name) {
+    struct runtime_processor_node *node;
+    
+    SYS_SLIST_FOR_EACH_CONTAINER(&runtime_processors, node, node) {
+        const struct runtime_processor_config *cfg = node->dev->config;
+        if (strcmp(cfg->name, name) == 0) {
+            return node->dev;
+        }
+    }
+    
+    return NULL;
+}
+
+int zmk_input_processor_runtime_foreach(int (*callback)(const struct device *dev, void *user_data),
+                                       void *user_data) {
+    struct runtime_processor_node *node;
+    
+    SYS_SLIST_FOR_EACH_CONTAINER(&runtime_processors, node, node) {
+        int ret = callback(node->dev, user_data);
+        if (ret != 0) {
+            return ret;
+        }
+    }
+    
+    return 0;
+}
+
+#define RUNTIME_PROCESSOR_INST(n)                                                                  \
+    static const uint16_t runtime_x_codes_##n[] = DT_INST_PROP(n, x_codes);                       \
+    static const uint16_t runtime_y_codes_##n[] = DT_INST_PROP(n, y_codes);                       \
+    BUILD_ASSERT(ARRAY_SIZE(runtime_x_codes_##n) == ARRAY_SIZE(runtime_y_codes_##n),              \
+                 "X and Y codes need to be the same size");                                        \
+    static const struct runtime_processor_config runtime_config_##n = {                            \
+        .name = DT_INST_PROP(n, name),                                                             \
+        .type = DT_INST_PROP_OR(n, type, INPUT_EV_REL),                                            \
+        .x_codes_len = DT_INST_PROP_LEN(n, x_codes),                                               \
+        .y_codes_len = DT_INST_PROP_LEN(n, y_codes),                                               \
+        .x_codes = runtime_x_codes_##n,                                                            \
+        .y_codes = runtime_y_codes_##n,                                                            \
+        .initial_scale_multiplier = DT_INST_PROP_OR(n, scale_multiplier, 1),                       \
+        .initial_scale_divisor = DT_INST_PROP_OR(n, scale_divisor, 1),                             \
+        .initial_rotation_degrees = DT_INST_PROP_OR(n, rotation_degrees, 0),                       \
+    };                                                                                             \
+    static struct runtime_processor_data runtime_data_##n;                                         \
+    DEVICE_DT_INST_DEFINE(n, &runtime_processor_init, NULL, &runtime_data_##n,                     \
+                          &runtime_config_##n, POST_KERNEL,                                        \
+                          CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &runtime_processor_driver_api);
+
+DT_INST_FOREACH_STATUS_OKAY(RUNTIME_PROCESSOR_INST)

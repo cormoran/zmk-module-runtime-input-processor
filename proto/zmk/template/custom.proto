@@ -10,9 +10,47 @@ message SampleResponse {
     string value = 1;
 }
 
+// Runtime Input Processor Messages
+message InputProcessorInfo {
+    string name = 1;           // Short name (max 16 chars for BLE)
+    uint32 scale_multiplier = 2;  // Scaling multiplier
+    uint32 scale_divisor = 3;     // Scaling divisor (multiply by scale_multiplier/scale_divisor)
+    int32 rotation_degrees = 4;    // Rotation angle in degrees
+}
+
+message ListInputProcessorsRequest {
+    // Empty - requests list of all input processors
+}
+
+message ListInputProcessorsResponse {
+    repeated InputProcessorInfo processors = 1;
+}
+
+message GetInputProcessorRequest {
+    string name = 1;  // Name of the input processor
+}
+
+message GetInputProcessorResponse {
+    InputProcessorInfo processor = 1;
+}
+
+message SetInputProcessorRequest {
+    string name = 1;           // Name of the input processor to update
+    uint32 scale_multiplier = 2;  // New scaling multiplier (0 = no change)
+    uint32 scale_divisor = 3;     // New scaling divisor (0 = no change)
+    int32 rotation_degrees = 4;    // New rotation angle (-1 = no change)
+}
+
+message SetInputProcessorResponse {
+    InputProcessorInfo processor = 1;  // Updated processor info
+}
+
 message Request {
     oneof request_type {
         SampleRequest sample = 1;
+        ListInputProcessorsRequest list_input_processors = 2;
+        GetInputProcessorRequest get_input_processor = 3;
+        SetInputProcessorRequest set_input_processor = 4;
     }
 }
 
@@ -24,5 +62,19 @@ message Response {
     oneof response_type {
         ErrorResponse error = 1;
         SampleResponse sample = 2;
+        ListInputProcessorsResponse list_input_processors = 3;
+        GetInputProcessorResponse get_input_processor = 4;
+        SetInputProcessorResponse set_input_processor = 5;
+    }
+}
+
+// Notifications
+message InputProcessorChangedNotification {
+    InputProcessorInfo processor = 1;
+}
+
+message Notification {
+    oneof notification_type {
+        InputProcessorChangedNotification input_processor_changed = 1;
     }
 }

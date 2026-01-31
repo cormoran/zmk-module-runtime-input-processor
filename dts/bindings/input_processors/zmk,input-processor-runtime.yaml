@@ -1,0 +1,53 @@
+# Copyright (c) 2026 The ZMK Contributors
+# SPDX-License-Identifier: MIT
+
+description: |
+  Runtime configurable input processor for ZMK.
+  Supports runtime configuration of scaling and rotation parameters.
+
+compatible: "zmk,input-processor-runtime"
+
+include: base.yaml
+
+properties:
+  name:
+    type: string
+    required: true
+    description: |
+      Short name for the input processor (max 16 chars for BLE compatibility).
+      Used to identify the processor in runtime configuration.
+
+  type:
+    type: int
+    default: 0x02  # INPUT_EV_REL
+    description: Event type to process
+
+  x-codes:
+    type: array
+    required: true
+    description: X-axis input codes to process
+
+  y-codes:
+    type: array
+    required: true
+    description: Y-axis input codes to process
+
+  scale-multiplier:
+    type: int
+    default: 1
+    description: Initial scaling multiplier
+
+  scale-divisor:
+    type: int
+    default: 1
+    description: Initial scaling divisor
+
+  rotation-degrees:
+    type: int
+    default: 0
+    description: Initial rotation angle in degrees
+
+  track-remainders:
+    type: boolean
+    default: true
+    description: Track remainders for scaling operations

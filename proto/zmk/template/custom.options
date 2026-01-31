@@ -3,3 +3,9 @@
 
 zmk.template.SampleResponse.value    max_size:64
 zmk.template.ErrorResponse.message   max_size:64
+
+# Runtime Input Processor field sizes
+zmk.template.InputProcessorInfo.name max_size:16
+zmk.template.ListInputProcessorsResponse.processors max_count:8
+zmk.template.GetInputProcessorRequest.name max_size:16
+zmk.template.SetInputProcessorRequest.name max_size:16
