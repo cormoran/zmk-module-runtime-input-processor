@@ -146,14 +146,13 @@ static int runtime_processor_handle_event(const struct device *dev,
             // If we have both X and Y, apply rotation
             if (data->has_y) {
                 // X' = X * cos - Y * sin
+                // Using 1000 as scaling factor for fixed-point arithmetic (precision: 0.001)
                 int32_t rotated_x = (data->last_x * data->cos_val - data->last_y * data->sin_val) / 1000;
                 event->value = (int16_t)rotated_x;
                 data->has_x = false;
                 data->has_y = false;
-            } else {
-                // Wait for Y, keep current value
-                event->value = value;
             }
+            // If no Y yet, event value already contains scaled X (rotation applied on next pair)
         } else {
             data->last_y = value;
             data->has_y = true;
@@ -165,10 +164,8 @@ static int runtime_processor_handle_event(const struct device *dev,
                 event->value = (int16_t)rotated_y;
                 data->has_x = false;
                 data->has_y = false;
-            } else {
-                // Wait for X, keep current value
-                event->value = value;
             }
+            // If no X yet, event value already contains scaled Y (rotation applied on next pair)
         }
     }
 

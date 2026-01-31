@@ -150,9 +150,21 @@ static void send_processor_notification(const struct device *dev) {
     info->scale_divisor = scale_div;
     info->rotation_degrees = rotation;
 
-    // TODO: Send notification via ZMK event system
-    // This would require implementing event relay for peripherals
-    LOG_INF("Processor %s changed: scale=%d/%d, rotation=%d", name, scale_mul, scale_div, rotation);
+    // TODO: Implement notification sending via ZMK event system for peripheral relay
+    // This requires implementing event relay infrastructure
+    LOG_WRN("Notification prepared but not sent (peripheral relay not implemented): %s", name);
+}
+
+// Helper callback to send notification for each processor during list operation
+struct list_processors_context {
+    int count;
+};
+
+static int list_processors_callback(const struct device *dev, void *user_data) {
+    struct list_processors_context *ctx = (struct list_processors_context *)user_data;
+    send_processor_notification(dev);
+    ctx->count++;
+    return 0;
 }
 
 /**
@@ -162,21 +174,11 @@ static int handle_list_input_processors(const zmk_template_ListInputProcessorsRe
                                        zmk_template_Response *resp) {
     LOG_DBG("Listing input processors via notifications");
 
-    // Helper callback to send notification for each processor
-    struct list_context {
-        int count;
-    } ctx = { .count = 0 };
+    struct list_processors_context ctx = { .count = 0 };
 
-    auto int list_callback(const struct device *dev, void *user_data) {
-        struct list_context *c = (struct list_context *)user_data;
-        send_processor_notification(dev);
-        c->count++;
-        return 0;
-    }
+    zmk_input_processor_runtime_foreach(list_processors_callback, &ctx);
 
-    zmk_input_processor_runtime_foreach(list_callback, &ctx);
-
-    // Return empty response (notifications contain the data)
+    // Return empty/no error response (notifications contain the data)
     resp->which_response_type = zmk_template_Response_set_input_processor_tag;
     resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
         zmk_template_SetInputProcessorResponse_init_zero;
