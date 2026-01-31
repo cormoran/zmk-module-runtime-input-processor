@@ -2,14 +2,6 @@ syntax = "proto3";
 
 package zmk.template;
 
-message SampleRequest {
-    int32 value = 1;
-}
-
-message SampleResponse {
-    string value = 1;
-}
-
 // Runtime Input Processor Messages
 message InputProcessorInfo {
     string name = 1;           // Short name (max 16 chars for BLE)
@@ -59,13 +51,12 @@ message SetInputProcessorResponse {
 
 message Request {
     oneof request_type {
-        SampleRequest sample = 1;
-        ListInputProcessorsRequest list_input_processors = 2;
-        GetInputProcessorRequest get_input_processor = 3;
-        SetScaleMultiplierRequest set_scale_multiplier = 4;
-        SetScaleDivisorRequest set_scale_divisor = 5;
-        SetRotationRequest set_rotation = 6;
-        ResetInputProcessorRequest reset_input_processor = 7;
+        ListInputProcessorsRequest list_input_processors = 1;
+        GetInputProcessorRequest get_input_processor = 2;
+        SetScaleMultiplierRequest set_scale_multiplier = 3;
+        SetScaleDivisorRequest set_scale_divisor = 4;
+        SetRotationRequest set_rotation = 5;
+        ResetInputProcessorRequest reset_input_processor = 6;
     }
 }
 
@@ -76,9 +67,8 @@ message ErrorResponse {
 message Response {
     oneof response_type {
         ErrorResponse error = 1;
-        SampleResponse sample = 2;
-        GetInputProcessorResponse get_input_processor = 3;
-        SetInputProcessorResponse set_input_processor = 4;
+        GetInputProcessorResponse get_input_processor = 2;
+        SetInputProcessorResponse set_input_processor = 3;
     }
 }
 

@@ -10,6 +10,7 @@
 #include <zmk/template/custom.pb.h>
 #include <zmk/pointing/input_processor_runtime.h>
 #include <zmk/event_manager.h>
+#include <zmk/events/input_processor_state_changed.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -32,11 +33,6 @@ ZMK_RPC_CUSTOM_SUBSYSTEM(zmk__template, &template_feature_meta,
 
 ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(zmk__template, zmk_template_Response);
 
-// Global buffer for notifications
-static zmk_template_Notification notification_buffer;
-
-static int handle_sample_request(const zmk_template_SampleRequest *req,
-                                 zmk_template_Response *resp);
 static int handle_list_input_processors(const zmk_template_ListInputProcessorsRequest *req,
                                         zmk_template_Response *resp);
 static int handle_get_input_processor(const zmk_template_GetInputProcessorRequest *req,
@@ -76,9 +72,6 @@ template_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
 
   int rc = 0;
   switch (req.which_request_type) {
-  case zmk_template_Request_sample_tag:
-    rc = handle_sample_request(&req.request_type.sample, resp);
-    break;
   case zmk_template_Request_list_input_processors_tag:
     rc = handle_list_input_processors(&req.request_type.list_input_processors, resp);
     break;
@@ -111,50 +104,6 @@ template_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
   return true;
 }
 
-/**
- * Handle the SampleRequest
- */
-static int handle_sample_request(const zmk_template_SampleRequest *req,
-                                 zmk_template_Response *resp) {
-  LOG_DBG("Received sample request with value: %d", req->value);
-
-  zmk_template_SampleResponse result = zmk_template_SampleResponse_init_zero;
-
-  snprintf(result.value, sizeof(result.value),
-           "Hello from firmware! Received: %d", req->value);
-
-  resp->which_response_type = zmk_template_Response_sample_tag;
-  resp->response_type.sample = result;
-  return 0;
-}
-
-// Helper to send processor changed notification
-static void send_processor_notification(const struct device *dev) {
-    const char *name;
-    uint32_t scale_mul, scale_div;
-    int32_t rotation;
-
-    int ret = zmk_input_processor_runtime_get_config(dev, &name, &scale_mul, &scale_div, &rotation);
-    if (ret < 0) {
-        return;
-    }
-
-    // Prepare notification
-    notification_buffer = (zmk_template_Notification)zmk_template_Notification_init_zero;
-    notification_buffer.which_notification_type = zmk_template_Notification_input_processor_changed_tag;
-    
-    zmk_template_InputProcessorInfo *info = &notification_buffer.notification_type.input_processor_changed.processor;
-    strncpy(info->name, name, sizeof(info->name) - 1);
-    info->name[sizeof(info->name) - 1] = '\0';
-    info->scale_multiplier = scale_mul;
-    info->scale_divisor = scale_div;
-    info->rotation_degrees = rotation;
-
-    // TODO: Implement notification sending via ZMK event system for peripheral relay
-    // This requires implementing event relay infrastructure
-    LOG_WRN("Notification prepared but not sent (peripheral relay not implemented): %s", name);
-}
-
 // Helper callback to send notification for each processor during list operation
 struct list_processors_context {
     int count;
@@ -162,28 +111,40 @@ struct list_processors_context {
 
 static int list_processors_callback(const struct device *dev, void *user_data) {
     struct list_processors_context *ctx = (struct list_processors_context *)user_data;
-    send_processor_notification(dev);
+    
+    const char *name;
+    struct zmk_input_processor_runtime_config config;
+    int ret = zmk_input_processor_runtime_get_config(dev, &name, &config);
+    if (ret < 0) {
+        return 0;
+    }
+
+    // Raise event which will be caught by listener and sent as notification
+    raise_zmk_input_processor_state_changed((struct zmk_input_processor_state_changed){
+        .name = name,
+        .config = config
+    });
+    
     ctx->count++;
     return 0;
 }
 
 /**
- * Handle listing all input processors - sends notifications
+ * Handle listing all input processors - raises events for each
  */
 static int handle_list_input_processors(const zmk_template_ListInputProcessorsRequest *req,
                                        zmk_template_Response *resp) {
-    LOG_DBG("Listing input processors via notifications");
+    LOG_DBG("Listing input processors via events");
 
     struct list_processors_context ctx = { .count = 0 };
-
     zmk_input_processor_runtime_foreach(list_processors_callback, &ctx);
 
-    // Return empty/no error response (notifications contain the data)
+    // Return empty response (notifications sent via events contain the data)
     resp->which_response_type = zmk_template_Response_set_input_processor_tag;
     resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
         zmk_template_SetInputProcessorResponse_init_zero;
 
-    LOG_INF("Sent notifications for %d input processors", ctx.count);
+    LOG_INF("Raised events for %d input processors", ctx.count);
     return 0;
 }
 
@@ -203,19 +164,17 @@ static int handle_get_input_processor(const zmk_template_GetInputProcessorReques
     zmk_template_GetInputProcessorResponse result = zmk_template_GetInputProcessorResponse_init_zero;
 
     const char *name;
-    uint32_t scale_mul, scale_div;
-    int32_t rotation;
-
-    int ret = zmk_input_processor_runtime_get_config(dev, &name, &scale_mul, &scale_div, &rotation);
+    struct zmk_input_processor_runtime_config config;
+    int ret = zmk_input_processor_runtime_get_config(dev, &name, &config);
     if (ret < 0) {
         return ret;
     }
 
     strncpy(result.processor.name, name, sizeof(result.processor.name) - 1);
     result.processor.name[sizeof(result.processor.name) - 1] = '\0';
-    result.processor.scale_multiplier = scale_mul;
-    result.processor.scale_divisor = scale_div;
-    result.processor.rotation_degrees = rotation;
+    result.processor.scale_multiplier = config.scale_multiplier;
+    result.processor.scale_divisor = config.scale_divisor;
+    result.processor.rotation_degrees = config.rotation_degrees;
 
     resp->which_response_type = zmk_template_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -237,21 +196,20 @@ static int handle_set_scale_multiplier(const zmk_template_SetScaleMultiplierRequ
     }
 
     // Get current divisor
-    uint32_t scale_div;
-    int ret = zmk_input_processor_runtime_get_config(dev, NULL, NULL, &scale_div, NULL);
+    struct zmk_input_processor_runtime_config config;
+    int ret = zmk_input_processor_runtime_get_config(dev, NULL, &config);
     if (ret < 0) {
         return ret;
     }
 
     // Set new multiplier (persistent)
-    ret = zmk_input_processor_runtime_set_scaling(dev, req->value, scale_div, true);
+    ret = zmk_input_processor_runtime_set_scaling(dev, req->value, config.scale_divisor, true);
     if (ret < 0) {
         LOG_ERR("Failed to set scale multiplier: %d", ret);
         return ret;
     }
 
-    // Send notification
-    send_processor_notification(dev);
+    // Event will be raised by listener
 
     // Return empty response
     resp->which_response_type = zmk_template_Response_set_input_processor_tag;
@@ -275,21 +233,20 @@ static int handle_set_scale_divisor(const zmk_template_SetScaleDivisorRequest *r
     }
 
     // Get current multiplier
-    uint32_t scale_mul;
-    int ret = zmk_input_processor_runtime_get_config(dev, NULL, &scale_mul, NULL, NULL);
+    struct zmk_input_processor_runtime_config config;
+    int ret = zmk_input_processor_runtime_get_config(dev, NULL, &config);
     if (ret < 0) {
         return ret;
     }
 
     // Set new divisor (persistent)
-    ret = zmk_input_processor_runtime_set_scaling(dev, scale_mul, req->value, true);
+    ret = zmk_input_processor_runtime_set_scaling(dev, config.scale_multiplier, req->value, true);
     if (ret < 0) {
         LOG_ERR("Failed to set scale divisor: %d", ret);
         return ret;
     }
 
-    // Send notification
-    send_processor_notification(dev);
+    // Event will be raised by listener
 
     // Return empty response
     resp->which_response_type = zmk_template_Response_set_input_processor_tag;
@@ -319,8 +276,7 @@ static int handle_set_rotation(const zmk_template_SetRotationRequest *req,
         return ret;
     }
 
-    // Send notification
-    send_processor_notification(dev);
+    // Event will be raised by listener
 
     // Return empty response
     resp->which_response_type = zmk_template_Response_set_input_processor_tag;
@@ -350,8 +306,7 @@ static int handle_reset_input_processor(const zmk_template_ResetInputProcessorRe
         return ret;
     }
 
-    // Send notification
-    send_processor_notification(dev);
+    // Event will be raised by listener
 
     // Return empty response
     resp->which_response_type = zmk_template_Response_set_input_processor_tag;

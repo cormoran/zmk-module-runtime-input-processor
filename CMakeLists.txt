@@ -7,6 +7,7 @@ if(CONFIG_ZMK_TEMPLATE_FEATURE)
     if(CONFIG_ZMK_TEMPLATE_FEATURE_RUNTIME_INPUT_PROCESSOR)
         target_sources(app PRIVATE src/pointing/input_processor_runtime.c)
         target_sources(app PRIVATE src/behaviors/behavior_input_processor_temp_config.c)
+        target_sources(app PRIVATE src/events/input_processor_state_changed.c)
     endif()
 
     if(CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC)

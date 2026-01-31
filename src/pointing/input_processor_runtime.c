@@ -17,6 +17,9 @@
 #include <zephyr/settings/settings.h>
 #endif
 
+#include <zmk/event_manager.h>
+#include <zmk/events/input_processor_state_changed.h>
+
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 struct runtime_processor_config {
@@ -59,6 +62,9 @@ static sys_slist_t runtime_processors = SYS_SLIST_STATIC_INIT(&runtime_processor
 struct runtime_processor_node {
     sys_snode_t node;
     const struct device *dev;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    struct k_work_delayable save_work;
+#endif
 };
 
 static void update_rotation_values(struct runtime_processor_data *data) {
@@ -183,7 +189,10 @@ struct processor_settings {
     int32_t rotation_degrees;
 };
 
-static int save_processor_settings(const struct device *dev) {
+static void save_processor_settings_work_handler(struct k_work *work) {
+    struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+    struct runtime_processor_node *node = CONTAINER_OF(dwork, struct runtime_processor_node, save_work);
+    const struct device *dev = node->dev;
     const struct runtime_processor_config *cfg = dev->config;
     struct runtime_processor_data *data = dev->data;
     
@@ -202,7 +211,18 @@ static int save_processor_settings(const struct device *dev) {
     } else {
         LOG_INF("Saved settings for %s", cfg->name);
     }
-    return ret;
+}
+
+static int schedule_save_processor_settings(const struct device *dev) {
+    struct runtime_processor_node *node;
+    
+    SYS_SLIST_FOR_EACH_CONTAINER(&runtime_processors, node, node) {
+        if (node->dev == dev) {
+            return k_work_reschedule(&node->save_work, K_MSEC(CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE));
+        }
+    }
+    
+    return -ENODEV;
 }
 
 static int load_processor_settings_cb(const char *name, size_t len, settings_read_cb read_cb,
@@ -282,10 +302,29 @@ static int runtime_processor_init(const struct device *dev) {
     }
     
     node->dev = dev;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    k_work_init_delayable(&node->save_work, save_processor_settings_work_handler);
+#endif
     sys_slist_append(&runtime_processors, &node->node);
     LOG_INF("Runtime processor '%s' initialized", cfg->name);
 
     return 0;
+}
+
+// Helper to raise state changed event
+static void raise_state_changed_event(const struct device *dev) {
+    const char *name;
+    struct zmk_input_processor_runtime_config config;
+    
+    int ret = zmk_input_processor_runtime_get_config(dev, &name, &config);
+    if (ret < 0) {
+        return;
+    }
+    
+    raise_zmk_input_processor_state_changed((struct zmk_input_processor_state_changed){
+        .name = name,
+        .config = config
+    });
 }
 
 // Public API for runtime configuration
@@ -315,13 +354,16 @@ int zmk_input_processor_runtime_set_scaling(const struct device *dev,
     LOG_INF("Set scaling to %d/%d%s", data->scale_multiplier, data->scale_divisor,
             persistent ? " (persistent)" : " (temporary)");
     
+    int ret = 0;
 #if IS_ENABLED(CONFIG_SETTINGS)
     if (persistent) {
-        return save_processor_settings(dev);
+        ret = schedule_save_processor_settings(dev);
+        // Raise event for persistent changes
+        raise_state_changed_event(dev);
     }
 #endif
     
-    return 0;
+    return ret;
 }
 
 int zmk_input_processor_runtime_set_rotation(const struct device *dev, int32_t degrees,
@@ -339,13 +381,16 @@ int zmk_input_processor_runtime_set_rotation(const struct device *dev, int32_t d
 
     LOG_INF("Set rotation to %d degrees%s", degrees, persistent ? " (persistent)" : " (temporary)");
     
+    int ret = 0;
 #if IS_ENABLED(CONFIG_SETTINGS)
     if (persistent) {
-        return save_processor_settings(dev);
+        ret = schedule_save_processor_settings(dev);
+        // Raise event for persistent changes
+        raise_state_changed_event(dev);
     }
 #endif
     
-    return 0;
+    return ret;
 }
 
 int zmk_input_processor_runtime_reset(const struct device *dev) {
@@ -369,11 +414,14 @@ int zmk_input_processor_runtime_reset(const struct device *dev) {
     
     LOG_INF("Reset processor '%s' to defaults", cfg->name);
     
+    int ret = 0;
 #if IS_ENABLED(CONFIG_SETTINGS)
-    return save_processor_settings(dev);
-#else
-    return 0;
+    ret = schedule_save_processor_settings(dev);
+    // Raise event
+    raise_state_changed_event(dev);
 #endif
+    
+    return ret;
 }
 
 void zmk_input_processor_runtime_restore_persistent(const struct device *dev) {
@@ -394,9 +442,7 @@ void zmk_input_processor_runtime_restore_persistent(const struct device *dev) {
 
 int zmk_input_processor_runtime_get_config(const struct device *dev,
                                            const char **name,
-                                           uint32_t *scale_multiplier,
-                                           uint32_t *scale_divisor,
-                                           int32_t *rotation_degrees) {
+                                           struct zmk_input_processor_runtime_config *config) {
     if (!dev) {
         return -EINVAL;
     }
@@ -407,14 +453,10 @@ int zmk_input_processor_runtime_get_config(const struct device *dev,
     if (name) {
         *name = cfg->name;
     }
-    if (scale_multiplier) {
-        *scale_multiplier = data->scale_multiplier;
-    }
-    if (scale_divisor) {
-        *scale_divisor = data->scale_divisor;
-    }
-    if (rotation_degrees) {
-        *rotation_degrees = data->rotation_degrees;
+    if (config) {
+        config->scale_multiplier = data->scale_multiplier;
+        config->scale_divisor = data->scale_divisor;
+        config->rotation_degrees = data->rotation_degrees;
     }
 
     return 0;
