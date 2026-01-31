@@ -23,9 +23,6 @@ struct behavior_input_processor_temp_config_config {
 
 struct behavior_input_processor_temp_config_data {
     const struct device *processor;
-    uint32_t saved_scale_multiplier;
-    uint32_t saved_scale_divisor;
-    int32_t saved_rotation_degrees;
     bool is_active;
 };
 
@@ -55,35 +52,24 @@ static int on_keymap_binding_pressed(struct zmk_behavior_binding *binding,
         return -ENODEV;
     }
 
-    // Save current configuration
-    int ret = zmk_input_processor_runtime_get_config(
-        data->processor, NULL,
-        &data->saved_scale_multiplier,
-        &data->saved_scale_divisor,
-        &data->saved_rotation_degrees);
-    
-    if (ret < 0) {
-        LOG_ERR("Failed to get current config: %d", ret);
-        return ret;
-    }
-
-    // Apply temporary configuration
+    // Apply temporary configuration (non-persistent)
+    int ret = 0;
     if (cfg->scale_multiplier > 0 && cfg->scale_divisor > 0) {
         ret = zmk_input_processor_runtime_set_scaling(data->processor, 
                                                        cfg->scale_multiplier,
-                                                       cfg->scale_divisor);
+                                                       cfg->scale_divisor,
+                                                       false);  // temporary
         if (ret < 0) {
             LOG_ERR("Failed to set temporary scaling: %d", ret);
             return ret;
         }
     }
 
-    // Update rotation if provided and valid
-    // Note: Rotation is stored but not yet fully implemented in the processor
-    // It's kept for future implementation
+    // Update rotation if provided and valid (non-persistent)
     if (cfg->rotation_degrees >= -360 && cfg->rotation_degrees <= 360) {
         ret = zmk_input_processor_runtime_set_rotation(data->processor, 
-                                                        cfg->rotation_degrees);
+                                                        cfg->rotation_degrees,
+                                                        false);  // temporary
         if (ret < 0) {
             LOG_ERR("Failed to set temporary rotation: %d", ret);
             return ret;
@@ -108,24 +94,11 @@ static int on_keymap_binding_released(struct zmk_behavior_binding *binding,
         return 0;
     }
 
-    // Restore saved configuration
-    int ret = zmk_input_processor_runtime_set_scaling(data->processor,
-                                                       data->saved_scale_multiplier,
-                                                       data->saved_scale_divisor);
-    if (ret < 0) {
-        LOG_ERR("Failed to restore scaling: %d", ret);
-    }
-
-    ret = zmk_input_processor_runtime_set_rotation(data->processor,
-                                                    data->saved_rotation_degrees);
-    if (ret < 0) {
-        LOG_ERR("Failed to restore rotation: %d", ret);
-    }
+    // Restore persistent configuration
+    zmk_input_processor_runtime_restore_persistent(data->processor);
 
     data->is_active = false;
-    LOG_INF("Restored original config for %s: scale=%d/%d, rotation=%d",
-            cfg->processor_name, data->saved_scale_multiplier, 
-            data->saved_scale_divisor, data->saved_rotation_degrees);
+    LOG_INF("Restored persistent config for %s", cfg->processor_name);
 
     return ZMK_BEHAVIOR_OPAQUE;
 }

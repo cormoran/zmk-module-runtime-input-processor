@@ -34,15 +34,27 @@ message GetInputProcessorResponse {
     InputProcessorInfo processor = 1;
 }
 
-message SetInputProcessorRequest {
+message SetScaleMultiplierRequest {
     string name = 1;           // Name of the input processor to update
-    uint32 scale_multiplier = 2;  // New scaling multiplier (0 = no change)
-    uint32 scale_divisor = 3;     // New scaling divisor (0 = no change)
-    int32 rotation_degrees = 4;    // New rotation angle (not yet implemented, reserved for future use)
+    uint32 value = 2;          // New scaling multiplier
+}
+
+message SetScaleDivisorRequest {
+    string name = 1;           // Name of the input processor to update
+    uint32 value = 2;          // New scaling divisor
+}
+
+message SetRotationRequest {
+    string name = 1;           // Name of the input processor to update
+    int32 value = 2;           // New rotation angle in degrees
+}
+
+message ResetInputProcessorRequest {
+    string name = 1;           // Name of the input processor to reset
 }
 
 message SetInputProcessorResponse {
-    InputProcessorInfo processor = 1;  // Updated processor info
+    // Empty - use notification to report changes
 }
 
 message Request {
@@ -50,7 +62,10 @@ message Request {
         SampleRequest sample = 1;
         ListInputProcessorsRequest list_input_processors = 2;
         GetInputProcessorRequest get_input_processor = 3;
-        SetInputProcessorRequest set_input_processor = 4;
+        SetScaleMultiplierRequest set_scale_multiplier = 4;
+        SetScaleDivisorRequest set_scale_divisor = 5;
+        SetRotationRequest set_rotation = 6;
+        ResetInputProcessorRequest reset_input_processor = 7;
     }
 }
 
@@ -62,9 +77,8 @@ message Response {
     oneof response_type {
         ErrorResponse error = 1;
         SampleResponse sample = 2;
-        ListInputProcessorsResponse list_input_processors = 3;
-        GetInputProcessorResponse get_input_processor = 4;
-        SetInputProcessorResponse set_input_processor = 5;
+        GetInputProcessorResponse get_input_processor = 3;
+        SetInputProcessorResponse set_input_processor = 4;
     }
 }
 

@@ -1,17 +1,18 @@
 # ZMK Runtime Input Processor Module
 
-This ZMK module provides runtime configurable input processors for pointing devices. You can adjust scaling parameters dynamically through a web interface without rebuilding firmware.
+This ZMK module provides runtime configurable input processors for pointing devices. You can adjust scaling and rotation parameters dynamically through a web interface without rebuilding firmware.
 
 ## Features
 
 - **Runtime Configuration**: Adjust input processor parameters without rebuilding firmware
-- **Web Interface**: Configure settings through a browser-based UI
+- **Web Interface**: Configure settings through a browser-based UI (currently being updated)
 - **Scaling Support**: Configure speed multipliers (e.g., x2 faster, x0.5 slower)
+- **Rotation Support**: Apply rotation transformations in degrees (fully implemented with paired X/Y handling)
+- **Persistent Settings**: Settings saved to non-volatile storage
 - **Multiple Processors**: Support for multiple input processors with individual configuration
-- **Split Keyboard Support**: Works with split keyboards including peripheral support
+- **Split Keyboard Support**: Protocol designed for split keyboards including peripheral support
 - **Short Names**: Processor names limited to 16 characters for BLE efficiency
-
-**Note**: Rotation support is defined in the protocol but not yet fully implemented. Proper 2D rotation requires paired X/Y coordinate transformation which needs additional state management. This feature is reserved for future implementation.
+- **Temporary Changes**: Hold a key to temporarily change settings (perfect for DPI toggle)
 
 ## Setup
 

@@ -1,8 +1,7 @@
 /**
- * Template Feature - Custom Studio RPC Handler
+ * Runtime Input Processor - Custom Studio RPC Handler
  *
- * This file implements a custom RPC subsystem for ZMK Studio.
- * It demonstrates the minimum code needed to handle custom RPC requests.
+ * This file implements custom RPC subsystem for runtime input processor configuration.
  */
 
 #include <pb_decode.h>
@@ -10,6 +9,7 @@
 #include <zmk/studio/custom.h>
 #include <zmk/template/custom.pb.h>
 #include <zmk/pointing/input_processor_runtime.h>
+#include <zmk/event_manager.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -18,25 +18,22 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 /**
  * Metadata for the custom subsystem.
- * - ui_urls: URLs where the custom UI can be loaded from
- * - security: Security level for the RPC handler
  */
 static struct zmk_rpc_custom_subsystem_meta template_feature_meta = {
     ZMK_RPC_CUSTOM_SUBSYSTEM_UI_URLS("http://localhost:5173"),
-    // Unsecured is suggested by default to avoid unlocking in un-reliable
-    // environments.
     .security = ZMK_STUDIO_RPC_HANDLER_UNSECURED,
 };
 
 /**
  * Register the custom RPC subsystem.
- * The first argument is the subsystem name used to route requests from the
- * frontend. Format: <namespace>__<feature> (double underscore)
  */
 ZMK_RPC_CUSTOM_SUBSYSTEM(zmk__template, &template_feature_meta,
                          template_rpc_handle_request);
 
 ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(zmk__template, zmk_template_Response);
+
+// Global buffer for notifications
+static zmk_template_Notification notification_buffer;
 
 static int handle_sample_request(const zmk_template_SampleRequest *req,
                                  zmk_template_Response *resp);
@@ -44,13 +41,17 @@ static int handle_list_input_processors(const zmk_template_ListInputProcessorsRe
                                         zmk_template_Response *resp);
 static int handle_get_input_processor(const zmk_template_GetInputProcessorRequest *req,
                                       zmk_template_Response *resp);
-static int handle_set_input_processor(const zmk_template_SetInputProcessorRequest *req,
-                                      zmk_template_Response *resp);
-#endif
+static int handle_set_scale_multiplier(const zmk_template_SetScaleMultiplierRequest *req,
+                                       zmk_template_Response *resp);
+static int handle_set_scale_divisor(const zmk_template_SetScaleDivisorRequest *req,
+                                    zmk_template_Response *resp);
+static int handle_set_rotation(const zmk_template_SetRotationRequest *req,
+                               zmk_template_Response *resp);
+static int handle_reset_input_processor(const zmk_template_ResetInputProcessorRequest *req,
+                                        zmk_template_Response *resp);
 
 /**
  * Main request handler for the custom RPC subsystem.
- * Sets up the encoding callback for the response.
  */
 static bool
 template_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
@@ -78,17 +79,24 @@ template_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
   case zmk_template_Request_sample_tag:
     rc = handle_sample_request(&req.request_type.sample, resp);
     break;
-#if IS_ENABLED(CONFIG_ZMK_TEMPLATE_FEATURE_RUNTIME_INPUT_PROCESSOR)
   case zmk_template_Request_list_input_processors_tag:
     rc = handle_list_input_processors(&req.request_type.list_input_processors, resp);
     break;
   case zmk_template_Request_get_input_processor_tag:
     rc = handle_get_input_processor(&req.request_type.get_input_processor, resp);
     break;
-  case zmk_template_Request_set_input_processor_tag:
-    rc = handle_set_input_processor(&req.request_type.set_input_processor, resp);
+  case zmk_template_Request_set_scale_multiplier_tag:
+    rc = handle_set_scale_multiplier(&req.request_type.set_scale_multiplier, resp);
     break;
-#endif
+  case zmk_template_Request_set_scale_divisor_tag:
+    rc = handle_set_scale_divisor(&req.request_type.set_scale_divisor, resp);
+    break;
+  case zmk_template_Request_set_rotation_tag:
+    rc = handle_set_rotation(&req.request_type.set_rotation, resp);
+    break;
+  case zmk_template_Request_reset_input_processor_tag:
+    rc = handle_reset_input_processor(&req.request_type.reset_input_processor, resp);
+    break;
   default:
     LOG_WRN("Unsupported template request type: %d", req.which_request_type);
     rc = -1;
@@ -104,7 +112,7 @@ template_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
 }
 
 /**
- * Handle the SampleRequest and populate the response.
+ * Handle the SampleRequest
  */
 static int handle_sample_request(const zmk_template_SampleRequest *req,
                                  zmk_template_Response *resp) {
@@ -112,7 +120,6 @@ static int handle_sample_request(const zmk_template_SampleRequest *req,
 
   zmk_template_SampleResponse result = zmk_template_SampleResponse_init_zero;
 
-  // Create a simple response string based on the request value
   snprintf(result.value, sizeof(result.value),
            "Hello from firmware! Received: %d", req->value);
 
@@ -121,65 +128,61 @@ static int handle_sample_request(const zmk_template_SampleRequest *req,
   return 0;
 }
 
-#if IS_ENABLED(CONFIG_ZMK_TEMPLATE_FEATURE_RUNTIME_INPUT_PROCESSOR)
+// Helper to send processor changed notification
+static void send_processor_notification(const struct device *dev) {
+    const char *name;
+    uint32_t scale_mul, scale_div;
+    int32_t rotation;
 
-// Callback helper for listing processors
-struct list_processors_context {
-  zmk_template_ListInputProcessorsResponse *response;
-  size_t count;
-};
+    int ret = zmk_input_processor_runtime_get_config(dev, &name, &scale_mul, &scale_div, &rotation);
+    if (ret < 0) {
+        return;
+    }
 
-static int list_processors_callback(const struct device *dev, void *user_data) {
-  struct list_processors_context *ctx = (struct list_processors_context *)user_data;
-  
-  if (ctx->count >= ARRAY_SIZE(ctx->response->processors)) {
-    LOG_WRN("Too many processors, truncating list");
-    return 1; // Stop iteration
-  }
+    // Prepare notification
+    notification_buffer = (zmk_template_Notification)zmk_template_Notification_init_zero;
+    notification_buffer.which_notification_type = zmk_template_Notification_input_processor_changed_tag;
+    
+    zmk_template_InputProcessorInfo *info = &notification_buffer.notification_type.input_processor_changed.processor;
+    strncpy(info->name, name, sizeof(info->name) - 1);
+    info->name[sizeof(info->name) - 1] = '\0';
+    info->scale_multiplier = scale_mul;
+    info->scale_divisor = scale_div;
+    info->rotation_degrees = rotation;
 
-  const char *name;
-  uint32_t scale_mul, scale_div;
-  int32_t rotation;
-
-  int ret = zmk_input_processor_runtime_get_config(dev, &name, &scale_mul, &scale_div, &rotation);
-  if (ret < 0) {
-    return 0; // Continue iteration
-  }
-
-  zmk_template_InputProcessorInfo *info = &ctx->response->processors[ctx->count];
-  strncpy(info->name, name, sizeof(info->name) - 1);
-  info->name[sizeof(info->name) - 1] = '\0';
-  info->scale_multiplier = scale_mul;
-  info->scale_divisor = scale_div;
-  info->rotation_degrees = rotation;
-
-  ctx->count++;
-  return 0;
+    // TODO: Send notification via ZMK event system
+    // This would require implementing event relay for peripherals
+    LOG_INF("Processor %s changed: scale=%d/%d, rotation=%d", name, scale_mul, scale_div, rotation);
 }
 
 /**
- * Handle listing all runtime input processors
+ * Handle listing all input processors - sends notifications
  */
 static int handle_list_input_processors(const zmk_template_ListInputProcessorsRequest *req,
                                        zmk_template_Response *resp) {
-  LOG_DBG("Listing input processors");
+    LOG_DBG("Listing input processors via notifications");
 
-  zmk_template_ListInputProcessorsResponse result = zmk_template_ListInputProcessorsResponse_init_zero;
-  
-  struct list_processors_context ctx = {
-    .response = &result,
-    .count = 0,
-  };
+    // Helper callback to send notification for each processor
+    struct list_context {
+        int count;
+    } ctx = { .count = 0 };
 
-  zmk_input_processor_runtime_foreach(list_processors_callback, &ctx);
+    auto int list_callback(const struct device *dev, void *user_data) {
+        struct list_context *c = (struct list_context *)user_data;
+        send_processor_notification(dev);
+        c->count++;
+        return 0;
+    }
 
-  result.processors_count = ctx.count;
-  
-  resp->which_response_type = zmk_template_Response_list_input_processors_tag;
-  resp->response_type.list_input_processors = result;
-  
-  LOG_INF("Listed %d input processors", ctx.count);
-  return 0;
+    zmk_input_processor_runtime_foreach(list_callback, &ctx);
+
+    // Return empty response (notifications contain the data)
+    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
+    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
+        zmk_template_SetInputProcessorResponse_init_zero;
+
+    LOG_INF("Sent notifications for %d input processors", ctx.count);
+    return 0;
 }
 
 /**
@@ -187,95 +190,173 @@ static int handle_list_input_processors(const zmk_template_ListInputProcessorsRe
  */
 static int handle_get_input_processor(const zmk_template_GetInputProcessorRequest *req,
                                      zmk_template_Response *resp) {
-  LOG_DBG("Getting input processor: %s", req->name);
+    LOG_DBG("Getting input processor: %s", req->name);
 
-  const struct device *dev = zmk_input_processor_runtime_find_by_name(req->name);
-  if (!dev) {
-    LOG_WRN("Input processor not found: %s", req->name);
-    return -ENODEV;
-  }
+    const struct device *dev = zmk_input_processor_runtime_find_by_name(req->name);
+    if (!dev) {
+        LOG_WRN("Input processor not found: %s", req->name);
+        return -ENODEV;
+    }
 
-  zmk_template_GetInputProcessorResponse result = zmk_template_GetInputProcessorResponse_init_zero;
-  
-  const char *name;
-  uint32_t scale_mul, scale_div;
-  int32_t rotation;
+    zmk_template_GetInputProcessorResponse result = zmk_template_GetInputProcessorResponse_init_zero;
 
-  int ret = zmk_input_processor_runtime_get_config(dev, &name, &scale_mul, &scale_div, &rotation);
-  if (ret < 0) {
-    return ret;
-  }
+    const char *name;
+    uint32_t scale_mul, scale_div;
+    int32_t rotation;
 
-  strncpy(result.processor.name, name, sizeof(result.processor.name) - 1);
-  result.processor.name[sizeof(result.processor.name) - 1] = '\0';
-  result.processor.scale_multiplier = scale_mul;
-  result.processor.scale_divisor = scale_div;
-  result.processor.rotation_degrees = rotation;
+    int ret = zmk_input_processor_runtime_get_config(dev, &name, &scale_mul, &scale_div, &rotation);
+    if (ret < 0) {
+        return ret;
+    }
 
-  resp->which_response_type = zmk_template_Response_get_input_processor_tag;
-  resp->response_type.get_input_processor = result;
-  
-  return 0;
+    strncpy(result.processor.name, name, sizeof(result.processor.name) - 1);
+    result.processor.name[sizeof(result.processor.name) - 1] = '\0';
+    result.processor.scale_multiplier = scale_mul;
+    result.processor.scale_divisor = scale_div;
+    result.processor.rotation_degrees = rotation;
+
+    resp->which_response_type = zmk_template_Response_get_input_processor_tag;
+    resp->response_type.get_input_processor = result;
+
+    return 0;
 }
 
 /**
- * Handle setting input processor parameters
+ * Handle setting scale multiplier
  */
-static int handle_set_input_processor(const zmk_template_SetInputProcessorRequest *req,
-                                     zmk_template_Response *resp) {
-  LOG_DBG("Setting input processor: %s", req->name);
+static int handle_set_scale_multiplier(const zmk_template_SetScaleMultiplierRequest *req,
+                                       zmk_template_Response *resp) {
+    LOG_DBG("Setting scale multiplier for %s to %d", req->name, req->value);
 
-  const struct device *dev = zmk_input_processor_runtime_find_by_name(req->name);
-  if (!dev) {
-    LOG_WRN("Input processor not found: %s", req->name);
-    return -ENODEV;
-  }
-
-  // Update scaling if provided
-  if (req->scale_multiplier > 0 && req->scale_divisor > 0) {
-    int ret = zmk_input_processor_runtime_set_scaling(dev, req->scale_multiplier, req->scale_divisor);
-    if (ret < 0) {
-      LOG_ERR("Failed to set scaling: %d", ret);
-      return ret;
+    const struct device *dev = zmk_input_processor_runtime_find_by_name(req->name);
+    if (!dev) {
+        LOG_WRN("Input processor not found: %s", req->name);
+        return -ENODEV;
     }
-  }
 
-  // Update rotation if provided and within valid range
-  // Note: Rotation is stored but not yet fully implemented in the processor
-  // It's kept for future implementation
-  if (req->rotation_degrees >= -360 && req->rotation_degrees <= 360) {
-    int ret = zmk_input_processor_runtime_set_rotation(dev, req->rotation_degrees);
+    // Get current divisor
+    uint32_t scale_div;
+    int ret = zmk_input_processor_runtime_get_config(dev, NULL, NULL, &scale_div, NULL);
     if (ret < 0) {
-      LOG_ERR("Failed to set rotation: %d", ret);
-      return ret;
+        return ret;
     }
-  }
 
-  // Return updated configuration
-  zmk_template_SetInputProcessorResponse result = zmk_template_SetInputProcessorResponse_init_zero;
-  
-  const char *name;
-  uint32_t scale_mul, scale_div;
-  int32_t rotation;
+    // Set new multiplier (persistent)
+    ret = zmk_input_processor_runtime_set_scaling(dev, req->value, scale_div, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set scale multiplier: %d", ret);
+        return ret;
+    }
 
-  int ret = zmk_input_processor_runtime_get_config(dev, &name, &scale_mul, &scale_div, &rotation);
-  if (ret < 0) {
-    return ret;
-  }
+    // Send notification
+    send_processor_notification(dev);
 
-  strncpy(result.processor.name, name, sizeof(result.processor.name) - 1);
-  result.processor.name[sizeof(result.processor.name) - 1] = '\0';
-  result.processor.scale_multiplier = scale_mul;
-  result.processor.scale_divisor = scale_div;
-  result.processor.rotation_degrees = rotation;
+    // Return empty response
+    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
+    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
+        zmk_template_SetInputProcessorResponse_init_zero;
 
-  resp->which_response_type = zmk_template_Response_set_input_processor_tag;
-  resp->response_type.set_input_processor = result;
+    return 0;
+}
 
-  LOG_INF("Updated processor %s: scale=%d/%d, rotation=%d", 
-          name, scale_mul, scale_div, rotation);
-  
-  return 0;
+/**
+ * Handle setting scale divisor
+ */
+static int handle_set_scale_divisor(const zmk_template_SetScaleDivisorRequest *req,
+                                    zmk_template_Response *resp) {
+    LOG_DBG("Setting scale divisor for %s to %d", req->name, req->value);
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_name(req->name);
+    if (!dev) {
+        LOG_WRN("Input processor not found: %s", req->name);
+        return -ENODEV;
+    }
+
+    // Get current multiplier
+    uint32_t scale_mul;
+    int ret = zmk_input_processor_runtime_get_config(dev, NULL, &scale_mul, NULL, NULL);
+    if (ret < 0) {
+        return ret;
+    }
+
+    // Set new divisor (persistent)
+    ret = zmk_input_processor_runtime_set_scaling(dev, scale_mul, req->value, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set scale divisor: %d", ret);
+        return ret;
+    }
+
+    // Send notification
+    send_processor_notification(dev);
+
+    // Return empty response
+    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
+    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
+        zmk_template_SetInputProcessorResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting rotation
+ */
+static int handle_set_rotation(const zmk_template_SetRotationRequest *req,
+                               zmk_template_Response *resp) {
+    LOG_DBG("Setting rotation for %s to %d degrees", req->name, req->value);
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_name(req->name);
+    if (!dev) {
+        LOG_WRN("Input processor not found: %s", req->name);
+        return -ENODEV;
+    }
+
+    // Set rotation (persistent)
+    int ret = zmk_input_processor_runtime_set_rotation(dev, req->value, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set rotation: %d", ret);
+        return ret;
+    }
+
+    // Send notification
+    send_processor_notification(dev);
+
+    // Return empty response
+    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
+    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
+        zmk_template_SetInputProcessorResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle resetting input processor to defaults
+ */
+static int handle_reset_input_processor(const zmk_template_ResetInputProcessorRequest *req,
+                                        zmk_template_Response *resp) {
+    LOG_DBG("Resetting input processor: %s", req->name);
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_name(req->name);
+    if (!dev) {
+        LOG_WRN("Input processor not found: %s", req->name);
+        return -ENODEV;
+    }
+
+    // Reset to defaults
+    int ret = zmk_input_processor_runtime_reset(dev);
+    if (ret < 0) {
+        LOG_ERR("Failed to reset processor: %d", ret);
+        return ret;
+    }
+
+    // Send notification
+    send_processor_notification(dev);
+
+    // Return empty response
+    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
+    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
+        zmk_template_SetInputProcessorResponse_init_zero;
+
+    return 0;
 }
 
 #endif // CONFIG_ZMK_TEMPLATE_FEATURE_RUNTIME_INPUT_PROCESSOR

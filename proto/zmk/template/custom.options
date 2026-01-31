@@ -8,4 +8,7 @@ zmk.template.ErrorResponse.message   max_size:64
 zmk.template.InputProcessorInfo.name max_size:16
 zmk.template.ListInputProcessorsResponse.processors max_count:8
 zmk.template.GetInputProcessorRequest.name max_size:16
-zmk.template.SetInputProcessorRequest.name max_size:16
+zmk.template.SetScaleMultiplierRequest.name max_size:16
+zmk.template.SetScaleDivisorRequest.name max_size:16
+zmk.template.SetRotationRequest.name max_size:16
+zmk.template.ResetInputProcessorRequest.name max_size:16

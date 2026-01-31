@@ -13,6 +13,10 @@
 #include <zephyr/logging/log.h>
 #include <math.h>
 
+#if IS_ENABLED(CONFIG_SETTINGS)
+#include <zephyr/settings/settings.h>
+#endif
+
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 struct runtime_processor_config {
@@ -28,12 +32,25 @@ struct runtime_processor_config {
 };
 
 struct runtime_processor_data {
+    // Current active values (may be temporary from behavior)
     uint32_t scale_multiplier;
     uint32_t scale_divisor;
     int32_t rotation_degrees;
+    
+    // Persistent values (saved to settings, not affected by behavior)
+    uint32_t persistent_scale_multiplier;
+    uint32_t persistent_scale_divisor;
+    int32_t persistent_rotation_degrees;
+    
     // Precomputed rotation values
     int32_t cos_val;  // cos * 1000
     int32_t sin_val;  // sin * 1000
+    
+    // Last seen X/Y values for rotation
+    int16_t last_x;
+    int16_t last_y;
+    bool has_x;
+    bool has_y;
 };
 
 // Global list head for all runtime processors
@@ -111,20 +128,49 @@ static int runtime_processor_handle_event(const struct device *dev,
         return ZMK_INPUT_PROC_CONTINUE;
     }
 
-    // Store original value for rotation
-    int16_t original_value = event->value;
     bool is_x = (x_idx >= 0);
+    int16_t value = event->value;
 
     // Apply scaling first
     if (data->scale_multiplier > 0 && data->scale_divisor > 0) {
         scale_val(event, data->scale_multiplier, data->scale_divisor, state);
+        value = event->value;
     }
 
-    // Note: Rotation is not fully implemented yet
-    // Proper 2D rotation requires paired X/Y values, which would need
-    // additional state management to buffer and transform coordinate pairs.
-    // For now, only scaling is applied.
-    // TODO: Implement proper rotation using state to pair X and Y events
+    // Apply rotation if configured
+    if (data->rotation_degrees != 0) {
+        if (is_x) {
+            data->last_x = value;
+            data->has_x = true;
+            
+            // If we have both X and Y, apply rotation
+            if (data->has_y) {
+                // X' = X * cos - Y * sin
+                int32_t rotated_x = (data->last_x * data->cos_val - data->last_y * data->sin_val) / 1000;
+                event->value = (int16_t)rotated_x;
+                data->has_x = false;
+                data->has_y = false;
+            } else {
+                // Wait for Y, keep current value
+                event->value = value;
+            }
+        } else {
+            data->last_y = value;
+            data->has_y = true;
+            
+            // If we have both X and Y, apply rotation
+            if (data->has_x) {
+                // Y' = X * sin + Y * cos
+                int32_t rotated_y = (data->last_x * data->sin_val + data->last_y * data->cos_val) / 1000;
+                event->value = (int16_t)rotated_y;
+                data->has_x = false;
+                data->has_y = false;
+            } else {
+                // Wait for X, keep current value
+                event->value = value;
+            }
+        }
+    }
 
     return ZMK_INPUT_PROC_CONTINUE;
 }
@@ -132,6 +178,82 @@ static int runtime_processor_handle_event(const struct device *dev,
 static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
     .handle_event = runtime_processor_handle_event,
 };
+
+#if IS_ENABLED(CONFIG_SETTINGS)
+struct processor_settings {
+    uint32_t scale_multiplier;
+    uint32_t scale_divisor;
+    int32_t rotation_degrees;
+};
+
+static int save_processor_settings(const struct device *dev) {
+    const struct runtime_processor_config *cfg = dev->config;
+    struct runtime_processor_data *data = dev->data;
+    
+    struct processor_settings settings = {
+        .scale_multiplier = data->persistent_scale_multiplier,
+        .scale_divisor = data->persistent_scale_divisor,
+        .rotation_degrees = data->persistent_rotation_degrees,
+    };
+    
+    char path[64];
+    snprintf(path, sizeof(path), "input_proc/%s", cfg->name);
+    
+    int ret = settings_save_one(path, &settings, sizeof(settings));
+    if (ret < 0) {
+        LOG_ERR("Failed to save settings for %s: %d", cfg->name, ret);
+    } else {
+        LOG_INF("Saved settings for %s", cfg->name);
+    }
+    return ret;
+}
+
+static int load_processor_settings_cb(const char *name, size_t len, settings_read_cb read_cb,
+                                      void *cb_arg, void *param) {
+    const struct device *dev = (const struct device *)param;
+    struct runtime_processor_data *data = dev->data;
+    const struct runtime_processor_config *cfg = dev->config;
+    
+    if (len == sizeof(struct processor_settings)) {
+        struct processor_settings settings;
+        int rc = read_cb(cb_arg, &settings, sizeof(settings));
+        if (rc >= 0) {
+            data->persistent_scale_multiplier = settings.scale_multiplier;
+            data->persistent_scale_divisor = settings.scale_divisor;
+            data->persistent_rotation_degrees = settings.rotation_degrees;
+            
+            // Apply to current values
+            data->scale_multiplier = settings.scale_multiplier;
+            data->scale_divisor = settings.scale_divisor;
+            data->rotation_degrees = settings.rotation_degrees;
+            update_rotation_values(data);
+            
+            LOG_INF("Loaded settings for %s: scale=%d/%d, rotation=%d",
+                    cfg->name, settings.scale_multiplier, settings.scale_divisor,
+                    settings.rotation_degrees);
+            return 0;
+        }
+    }
+    return -EINVAL;
+}
+
+static int runtime_processor_settings_load_cb(const char *name, size_t len, 
+                                              settings_read_cb read_cb, void *cb_arg) {
+    struct runtime_processor_node *node;
+    
+    SYS_SLIST_FOR_EACH_CONTAINER(&runtime_processors, node, node) {
+        const struct runtime_processor_config *cfg = node->dev->config;
+        if (strcmp(name, cfg->name) == 0) {
+            return load_processor_settings_cb(name, len, read_cb, cb_arg, (void *)node->dev);
+        }
+    }
+    
+    return -ENOENT;
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(input_proc, "input_proc", NULL, 
+                               runtime_processor_settings_load_cb, NULL, NULL);
+#endif
 
 static int runtime_processor_init(const struct device *dev) {
     const struct runtime_processor_config *cfg = dev->config;
@@ -141,6 +263,17 @@ static int runtime_processor_init(const struct device *dev) {
     data->scale_multiplier = cfg->initial_scale_multiplier;
     data->scale_divisor = cfg->initial_scale_divisor;
     data->rotation_degrees = cfg->initial_rotation_degrees;
+    
+    // Initialize persistent values same as current
+    data->persistent_scale_multiplier = cfg->initial_scale_multiplier;
+    data->persistent_scale_divisor = cfg->initial_scale_divisor;
+    data->persistent_rotation_degrees = cfg->initial_rotation_degrees;
+    
+    // Initialize rotation state
+    data->has_x = false;
+    data->has_y = false;
+    data->last_x = 0;
+    data->last_y = 0;
 
     update_rotation_values(data);
 
@@ -161,7 +294,8 @@ static int runtime_processor_init(const struct device *dev) {
 // Public API for runtime configuration
 int zmk_input_processor_runtime_set_scaling(const struct device *dev, 
                                             uint32_t multiplier, 
-                                            uint32_t divisor) {
+                                            uint32_t divisor,
+                                            bool persistent) {
     if (!dev) {
         return -EINVAL;
     }
@@ -170,26 +304,95 @@ int zmk_input_processor_runtime_set_scaling(const struct device *dev,
     
     if (multiplier > 0) {
         data->scale_multiplier = multiplier;
+        if (persistent) {
+            data->persistent_scale_multiplier = multiplier;
+        }
     }
     if (divisor > 0) {
         data->scale_divisor = divisor;
+        if (persistent) {
+            data->persistent_scale_divisor = divisor;
+        }
     }
 
-    LOG_INF("Set scaling to %d/%d", data->scale_multiplier, data->scale_divisor);
+    LOG_INF("Set scaling to %d/%d%s", data->scale_multiplier, data->scale_divisor,
+            persistent ? " (persistent)" : " (temporary)");
+    
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        return save_processor_settings(dev);
+    }
+#endif
+    
     return 0;
 }
 
-int zmk_input_processor_runtime_set_rotation(const struct device *dev, int32_t degrees) {
+int zmk_input_processor_runtime_set_rotation(const struct device *dev, int32_t degrees,
+                                             bool persistent) {
     if (!dev) {
         return -EINVAL;
     }
 
     struct runtime_processor_data *data = dev->data;
     data->rotation_degrees = degrees;
+    if (persistent) {
+        data->persistent_rotation_degrees = degrees;
+    }
     update_rotation_values(data);
 
-    LOG_INF("Set rotation to %d degrees", degrees);
+    LOG_INF("Set rotation to %d degrees%s", degrees, persistent ? " (persistent)" : " (temporary)");
+    
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        return save_processor_settings(dev);
+    }
+#endif
+    
     return 0;
+}
+
+int zmk_input_processor_runtime_reset(const struct device *dev) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    const struct runtime_processor_config *cfg = dev->config;
+    struct runtime_processor_data *data = dev->data;
+    
+    // Reset to initial values
+    data->scale_multiplier = cfg->initial_scale_multiplier;
+    data->scale_divisor = cfg->initial_scale_divisor;
+    data->rotation_degrees = cfg->initial_rotation_degrees;
+    
+    data->persistent_scale_multiplier = cfg->initial_scale_multiplier;
+    data->persistent_scale_divisor = cfg->initial_scale_divisor;
+    data->persistent_rotation_degrees = cfg->initial_rotation_degrees;
+    
+    update_rotation_values(data);
+    
+    LOG_INF("Reset processor '%s' to defaults", cfg->name);
+    
+#if IS_ENABLED(CONFIG_SETTINGS)
+    return save_processor_settings(dev);
+#else
+    return 0;
+#endif
+}
+
+void zmk_input_processor_runtime_restore_persistent(const struct device *dev) {
+    if (!dev) {
+        return;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    
+    // Restore persistent values (used after temporary behavior changes)
+    data->scale_multiplier = data->persistent_scale_multiplier;
+    data->scale_divisor = data->persistent_scale_divisor;
+    data->rotation_degrees = data->persistent_rotation_degrees;
+    update_rotation_values(data);
+    
+    LOG_DBG("Restored persistent values");
 }
 
 int zmk_input_processor_runtime_get_config(const struct device *dev,

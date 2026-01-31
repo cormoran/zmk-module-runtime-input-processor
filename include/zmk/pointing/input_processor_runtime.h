@@ -7,6 +7,7 @@
 #pragma once
 
 #include <zephyr/device.h>
+#include <stdbool.h>
 
 /**
  * @brief Set the scaling parameters for a runtime input processor
@@ -14,20 +15,39 @@
  * @param dev Pointer to the device structure
  * @param multiplier Scaling multiplier (must be > 0)
  * @param divisor Scaling divisor (must be > 0)
+ * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
 int zmk_input_processor_runtime_set_scaling(const struct device *dev,
                                             uint32_t multiplier,
-                                            uint32_t divisor);
+                                            uint32_t divisor,
+                                            bool persistent);
 
 /**
  * @brief Set the rotation angle for a runtime input processor
  *
  * @param dev Pointer to the device structure
  * @param degrees Rotation angle in degrees
+ * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_rotation(const struct device *dev, int32_t degrees);
+int zmk_input_processor_runtime_set_rotation(const struct device *dev, int32_t degrees,
+                                             bool persistent);
+
+/**
+ * @brief Reset processor to default values and save to persistent storage
+ *
+ * @param dev Pointer to the device structure
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_reset(const struct device *dev);
+
+/**
+ * @brief Restore persistent values (used after temporary changes from behavior)
+ *
+ * @param dev Pointer to the device structure
+ */
+void zmk_input_processor_runtime_restore_persistent(const struct device *dev);
 
 /**
  * @brief Get the current configuration of a runtime input processor
