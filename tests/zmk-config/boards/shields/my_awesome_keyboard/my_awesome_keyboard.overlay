@@ -6,9 +6,14 @@
 #include <dt-bindings/zmk/matrix_transform.h>
 #include "my_awesome_keyboard-layouts.dtsi"
 
+#include <dt-bindings/zmk/pointing.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+#include "behaviors/runtime-input-processors.dtsi"
+
 &physical_layout0 {
 	transform = <&transform0>;
 };
+
 
 / {
 	chosen {
@@ -40,5 +45,27 @@
 		map = <
 		RC(0,0)  RC(0,1)  RC(0,2)  RC(0,3)  RC(0,4)  RC(0,5)  RC(0,6)  RC(0,7)  RC(0,8)  RC(0,9)  RC(0,10)
 		>;
+	};
+	
+	mouse_input_processor: mouse_input_processor {
+		compatible = "zmk,input-processor-runtime";
+		processor-label = "default";
+		type = <INPUT_EV_REL>;
+		x-codes = <INPUT_REL_X>;
+		y-codes = <INPUT_REL_Y>;
+		track-remainders;
+		
+		#input-processor-cells = <0>;
+	};
+	
+	scroll_input_processor: scroll_input_processor {
+		compatible = "zmk,input-processor-runtime";
+		processor-label = "scroll";
+		type = <INPUT_EV_REL>;
+		x-codes = <INPUT_REL_HWHEEL>;
+		y-codes = <INPUT_REL_WHEEL>;
+		track-remainders;
+		
+		#input-processor-cells = <0>;
 	};
 };

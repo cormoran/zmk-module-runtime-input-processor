@@ -1,18 +1,1 @@
 #include "../test.dtsi"
-#include <zephyr/dt-bindings/input/input-event-codes.h>
-#include "../../dts/runtime-input-processors.dtsi"
-
-// Enable runtime input processors for testing
-&mouse_runtime {
-    status = "okay";
-};
-
-&trackpad_runtime {
-    status = "okay";
-};
-
-&scroll_v_runtime {
-    status = "okay";
-};
-
-

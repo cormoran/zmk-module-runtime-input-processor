@@ -7,6 +7,14 @@
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/keys.h>
 
+&mmv_input_listener {
+	input-processors = <&mouse_input_processor>;
+};
+
+&msc_input_listener {
+	input-processors = <&scroll_input_processor>;
+};
+
 / {
 	keymap {
 		compatible = "zmk,keymap";
