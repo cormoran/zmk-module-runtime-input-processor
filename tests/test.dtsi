@@ -31,6 +31,8 @@
 		x-codes = <INPUT_REL_X>;
 		y-codes = <INPUT_REL_Y>;
 		track-remainders;
+		
+		#input-processor-cells = <0>;
 	};
 };
 
