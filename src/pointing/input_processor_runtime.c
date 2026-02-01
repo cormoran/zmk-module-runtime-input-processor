@@ -495,7 +495,7 @@ int zmk_input_processor_runtime_foreach(int (*callback)(const struct device *dev
     BUILD_ASSERT(ARRAY_SIZE(runtime_x_codes_##n) == ARRAY_SIZE(runtime_y_codes_##n),              \
                  "X and Y codes need to be the same size");                                        \
     static const struct runtime_processor_config runtime_config_##n = {                            \
-        .name = DT_INST_PROP(n, name),                                                             \
+        .name = DT_INST_PROP(n, processor_label),                                                   \
         .type = DT_INST_PROP_OR(n, type, INPUT_EV_REL),                                            \
         .x_codes_len = DT_INST_PROP_LEN(n, x_codes),                                               \
         .y_codes_len = DT_INST_PROP_LEN(n, y_codes),                                               \

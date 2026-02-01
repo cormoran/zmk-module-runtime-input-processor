@@ -17,13 +17,14 @@
     trackpad_runtime: trackpad_runtime {
         compatible = "zmk,input-processor-runtime";
         status = "disabled"; // Enable in your keymap when needed
-        name = "trackpad";
+        processor-label = "trackpad";
         type = <INPUT_EV_REL>;
         x-codes = <INPUT_REL_X>;
         y-codes = <INPUT_REL_Y>;
         scale-multiplier = <1>;
         scale-divisor = <1>;
         rotation-degrees = <0>;
+        track-remainders;
     };
 
     /*
@@ -33,13 +34,14 @@
     mouse_runtime: mouse_runtime {
         compatible = "zmk,input-processor-runtime";
         status = "disabled"; // Enable in your keymap when needed
-        name = "mouse";
+        processor-label = "mouse";
         type = <INPUT_EV_REL>;
         x-codes = <INPUT_REL_X>;
         y-codes = <INPUT_REL_Y>;
         scale-multiplier = <1>;
         scale-divisor = <1>;
         rotation-degrees = <0>;
+        track-remainders;
     };
 
     /*
@@ -49,13 +51,14 @@
     trackball_runtime: trackball_runtime {
         compatible = "zmk,input-processor-runtime";
         status = "disabled"; // Enable in your keymap when needed
-        name = "trackball";
+        processor-label = "trackball";
         type = <INPUT_EV_REL>;
         x-codes = <INPUT_REL_X>;
         y-codes = <INPUT_REL_Y>;
         scale-multiplier = <1>;
         scale-divisor = <1>;
         rotation-degrees = <0>;
+        track-remainders;
     };
 
     /*
@@ -65,13 +68,14 @@
     scroll_v_runtime: scroll_v_runtime {
         compatible = "zmk,input-processor-runtime";
         status = "disabled"; // Enable in your keymap when needed
-        name = "scroll_v";
+        processor-label = "scroll_v";
         type = <INPUT_EV_REL>;
-        x-codes = <>;
+        x-codes = <0>; // Unused, but must match y-codes length
         y-codes = <INPUT_REL_WHEEL>;
         scale-multiplier = <1>;
         scale-divisor = <1>;
         rotation-degrees = <0>;
+        track-remainders;
     };
 
     /*
@@ -81,13 +85,14 @@
     scroll_h_runtime: scroll_h_runtime {
         compatible = "zmk,input-processor-runtime";
         status = "disabled"; // Enable in your keymap when needed
-        name = "scroll_h";
+        processor-label = "scroll_h";
         type = <INPUT_EV_REL>;
         x-codes = <INPUT_REL_HWHEEL>;
-        y-codes = <>;
+        y-codes = <0>; // Unused, but must match x-codes length
         scale-multiplier = <1>;
         scale-divisor = <1>;
         rotation-degrees = <0>;
+        track-remainders;
     };
 
     /*
@@ -97,12 +102,13 @@
     joystick_runtime: joystick_runtime {
         compatible = "zmk,input-processor-runtime";
         status = "disabled"; // Enable in your keymap when needed
-        name = "joystick";
+        processor-label = "joystick";
         type = <INPUT_EV_REL>;
         x-codes = <INPUT_REL_X>;
         y-codes = <INPUT_REL_Y>;
         scale-multiplier = <1>;
         scale-divisor = <1>;
         rotation-degrees = <0>;
+        track-remainders;
     };
 };

@@ -10,11 +10,11 @@ compatible: "zmk,input-processor-runtime"
 include: base.yaml
 
 properties:
-  name:
+  processor-label:
     type: string
     required: true
     description: |
-      Short name for the input processor (max 16 chars for BLE compatibility).
+      Short label for the input processor (max 16 chars for BLE compatibility).
       Used to identify the processor in runtime configuration.
 
   type:
@@ -49,5 +49,4 @@ properties:
 
   track-remainders:
     type: boolean
-    default: true
-    description: Track remainders for scaling operations
+    description: Track remainders for scaling operations (enabled if present)
