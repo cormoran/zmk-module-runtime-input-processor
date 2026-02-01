@@ -4,7 +4,7 @@ package cormoran.rip;
 
 // Runtime Input Processor Messages
 message InputProcessorInfo {
-    string name             = 1;  // Short name (max 16 chars for BLE)
+    string name             = 1;  // Short name (max 8 chars for BLE)
     uint32 scale_multiplier = 2;  // Scaling multiplier
     uint32 scale_divisor =
         3;  // Scaling divisor (multiply by scale_multiplier/scale_divisor)
@@ -16,7 +16,7 @@ message ListInputProcessorsRequest {
 }
 
 message ListInputProcessorsResponse {
-    repeated InputProcessorInfo processors = 1;
+    // Empty - use notification to report processors
 }
 
 message GetInputProcessorRequest {
