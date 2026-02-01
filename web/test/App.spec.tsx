@@ -27,8 +27,12 @@ describe("App Component", () => {
       render(<App />);
 
       // Check for the main title
-      expect(screen.getByText(/ZMK Runtime Input Processor/i)).toBeInTheDocument();
-      expect(screen.getByText(/Configure input processor settings at runtime/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/ZMK Runtime Input Processor/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/Configure input processor settings at runtime/i)
+      ).toBeInTheDocument();
     });
 
     it("should render connection button when disconnected", () => {
@@ -42,7 +46,9 @@ describe("App Component", () => {
       render(<App />);
 
       // Check for footer text
-      expect(screen.getByText(/Runtime Input Processor Module/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Runtime Input Processor Module/i)
+      ).toBeInTheDocument();
     });
   });
 
@@ -87,7 +93,9 @@ describe("App Component", () => {
       expect(screen.getByText(/Disconnect/i)).toBeInTheDocument();
 
       // Verify Input Processors section is visible
-      expect(screen.getByRole('heading', { name: /Input Processors/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /Input Processors/i })
+      ).toBeInTheDocument();
     });
   });
 });
