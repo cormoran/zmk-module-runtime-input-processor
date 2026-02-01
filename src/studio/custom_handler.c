@@ -142,24 +142,27 @@ static int list_processors_callback(const struct device *dev, void *user_data) {
     return 0;
 }
 
+static void list_input_processors_work_handler(struct k_work *work) {
+    struct list_processors_context ctx = {.count = 0};
+    zmk_input_processor_runtime_foreach(list_processors_callback, &ctx);
+    LOG_INF("Raised events for %d input processors", ctx.count);
+}
+
+K_WORK_DEFINE(list_input_processors_work, list_input_processors_work_handler);
+
 /**
  * Handle listing all input processors - raises events for each
  */
 static int handle_list_input_processors(
     const zmk_template_ListInputProcessorsRequest *req,
     zmk_template_Response *resp) {
-    LOG_DBG("Listing input processors via events");
-
-    struct list_processors_context ctx = {.count = 0};
-    zmk_input_processor_runtime_foreach(list_processors_callback, &ctx);
+    k_work_submit(&list_input_processors_work);
 
     // Return empty response (notifications sent via events contain the data)
     resp->which_response_type = zmk_template_Response_list_input_processors_tag;
     resp->response_type.list_input_processors =
         (zmk_template_ListInputProcessorsResponse)
             zmk_template_ListInputProcessorsResponse_init_zero;
-
-    LOG_INF("Raised events for %d input processors", ctx.count);
     return 0;
 }
 

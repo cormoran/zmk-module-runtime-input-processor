@@ -3,7 +3,7 @@
  * Demonstrates custom RPC communication with a ZMK device
  */
 
-import { useContext, useState, useEffect } from "react";
+import { useContext, useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import { connect as serial_connect } from "@zmkfirmware/zmk-studio-ts-client/transport/serial";
 import {
@@ -90,31 +90,37 @@ export function InputProcessorManager() {
   const [scaleDivisor, setScaleDivisor] = useState<number>(1);
   const [rotationDegrees, setRotationDegrees] = useState<number>(0);
 
-  const subsystem = zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER);
+  const subsystem = useMemo(
+    () => zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [zmkApp?.state.customSubsystems]
+  );
 
-  const callRPC = async (request: Request): Promise<Response | null> => {
-    if (!zmkApp?.state.connection || !subsystem) return null;
+  const callRPC = useCallback(
+    async (request: Request): Promise<Response | null> => {
+      if (!zmkApp?.state.connection || !subsystem) return null;
+      try {
+        const service = new ZMKCustomSubsystem(
+          zmkApp.state.connection,
+          subsystem.index
+        );
 
-    try {
-      const service = new ZMKCustomSubsystem(
-        zmkApp.state.connection,
-        subsystem.index
-      );
+        const payload = Request.encode(request).finish();
+        const responsePayload = await service.callRPC(payload);
 
-      const payload = Request.encode(request).finish();
-      const responsePayload = await service.callRPC(payload);
-
-      if (responsePayload) {
-        return Response.decode(responsePayload);
+        if (responsePayload) {
+          return Response.decode(responsePayload);
+        }
+      } catch (err) {
+        console.error("RPC call failed:", err);
+        throw err;
       }
-    } catch (err) {
-      console.error("RPC call failed:", err);
-      throw err;
-    }
-    return null;
-  };
+      return null;
+    },
+    [zmkApp?.state.connection, subsystem]
+  );
 
-  const loadProcessors = async () => {
+  const loadProcessors = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -136,9 +142,9 @@ export function InputProcessorManager() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [callRPC]);
 
-  const updateProcessor = async () => {
+  const updateProcessor = useCallback(async () => {
     if (!selectedProcessor) return;
 
     setIsLoading(true);
@@ -196,17 +202,26 @@ export function InputProcessorManager() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [
+    callRPC,
+    selectedProcessor,
+    scaleMultiplier,
+    scaleDivisor,
+    rotationDegrees,
+  ]);
 
-  const selectProcessor = (name: string) => {
-    const proc = processors.find((p) => p.name === name);
-    if (proc) {
-      setSelectedProcessor(name);
-      setScaleMultiplier(proc.scaleMultiplier);
-      setScaleDivisor(proc.scaleDivisor);
-      setRotationDegrees(proc.rotationDegrees);
-    }
-  };
+  const selectProcessor = useCallback(
+    (name: string) => {
+      const proc = processors.find((p) => p.name === name);
+      if (proc) {
+        setSelectedProcessor(name);
+        setScaleMultiplier(proc.scaleMultiplier);
+        setScaleDivisor(proc.scaleDivisor);
+        setRotationDegrees(proc.rotationDegrees);
+      }
+    },
+    [processors]
+  );
 
   useEffect(() => {
     if (subsystem) {
@@ -228,7 +243,7 @@ export function InputProcessorManager() {
           const decoded = Notification.decode(notification.payload);
           if (decoded.inputProcessorChanged?.processor) {
             const proc = decoded.inputProcessorChanged.processor;
-            
+
             // Update or add processor to the list
             setProcessors((prev) => {
               const existingIndex = prev.findIndex((p) => p.name === proc.name);
