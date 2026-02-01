@@ -1,0 +1,108 @@
+/*
+ * Copyright (c) 2026 The ZMK Contributors
+ * SPDX-License-Identifier: MIT
+ *
+ * Common Runtime Input Processor Configurations
+ *
+ * This file provides pre-configured runtime input processors that can be easily
+ * included and used in keyboard configurations. Users can override these or
+ * create their own custom processors.
+ */
+
+/ {
+    /*
+     * Default trackpad processor
+     * Configured for relative X/Y movements with 1:1 scaling
+     */
+    trackpad_runtime: trackpad_runtime {
+        compatible = "zmk,input-processor-runtime";
+        status = "disabled"; // Enable in your keymap when needed
+        name = "trackpad";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <1>;
+        rotation-degrees = <0>;
+    };
+
+    /*
+     * Default mouse sensor processor
+     * Configured for relative X/Y movements with 1:1 scaling
+     */
+    mouse_runtime: mouse_runtime {
+        compatible = "zmk,input-processor-runtime";
+        status = "disabled"; // Enable in your keymap when needed
+        name = "mouse";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <1>;
+        rotation-degrees = <0>;
+    };
+
+    /*
+     * Default trackball processor
+     * Configured for relative X/Y movements with 1:1 scaling
+     */
+    trackball_runtime: trackball_runtime {
+        compatible = "zmk,input-processor-runtime";
+        status = "disabled"; // Enable in your keymap when needed
+        name = "trackball";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <1>;
+        rotation-degrees = <0>;
+    };
+
+    /*
+     * Default scroll wheel processor (vertical)
+     * Configured for vertical scroll events with 1:1 scaling
+     */
+    scroll_v_runtime: scroll_v_runtime {
+        compatible = "zmk,input-processor-runtime";
+        status = "disabled"; // Enable in your keymap when needed
+        name = "scroll_v";
+        type = <INPUT_EV_REL>;
+        x-codes = <>;
+        y-codes = <INPUT_REL_WHEEL>;
+        scale-multiplier = <1>;
+        scale-divisor = <1>;
+        rotation-degrees = <0>;
+    };
+
+    /*
+     * Default scroll wheel processor (horizontal)
+     * Configured for horizontal scroll events with 1:1 scaling
+     */
+    scroll_h_runtime: scroll_h_runtime {
+        compatible = "zmk,input-processor-runtime";
+        status = "disabled"; // Enable in your keymap when needed
+        name = "scroll_h";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_HWHEEL>;
+        y-codes = <>;
+        scale-multiplier = <1>;
+        scale-divisor = <1>;
+        rotation-degrees = <0>;
+    };
+
+    /*
+     * Default joystick processor
+     * Configured for relative X/Y movements with 1:1 scaling
+     */
+    joystick_runtime: joystick_runtime {
+        compatible = "zmk,input-processor-runtime";
+        status = "disabled"; // Enable in your keymap when needed
+        name = "joystick";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <1>;
+        rotation-degrees = <0>;
+    };
+};

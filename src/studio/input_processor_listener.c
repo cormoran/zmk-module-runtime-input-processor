@@ -70,7 +70,7 @@ static int input_processor_state_changed_listener(const zmk_event_t *eh) {
     
     // Raise notification event
     raise_zmk_studio_custom_notification((struct zmk_studio_custom_notification){
-        .subsystem_index = find_subsystem_index("zmk__template"),
+        .subsystem_index = find_subsystem_index("zmk__input_proc_rt"),
         .encode_payload = encode_cb
     });
     

@@ -27,11 +27,12 @@ static struct zmk_rpc_custom_subsystem_meta template_feature_meta = {
 
 /**
  * Register the custom RPC subsystem.
+ * Using "zmk__input_proc_rt" as the identifier (input processor runtime)
  */
-ZMK_RPC_CUSTOM_SUBSYSTEM(zmk__template, &template_feature_meta,
+ZMK_RPC_CUSTOM_SUBSYSTEM(zmk__input_proc_rt, &template_feature_meta,
                          template_rpc_handle_request);
 
-ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(zmk__template, zmk_template_Response);
+ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(zmk__input_proc_rt, zmk_template_Response);
 
 static int handle_list_input_processors(const zmk_template_ListInputProcessorsRequest *req,
                                         zmk_template_Response *resp);
@@ -53,7 +54,7 @@ static bool
 template_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
                             pb_callback_t *encode_response) {
   zmk_template_Response *resp =
-      ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER_ALLOCATE(zmk__template,
+      ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER_ALLOCATE(zmk__input_proc_rt,
                                                         encode_response);
 
   zmk_template_Request req = zmk_template_Request_init_zero;
@@ -140,9 +141,9 @@ static int handle_list_input_processors(const zmk_template_ListInputProcessorsRe
     zmk_input_processor_runtime_foreach(list_processors_callback, &ctx);
 
     // Return empty response (notifications sent via events contain the data)
-    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
-    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
-        zmk_template_SetInputProcessorResponse_init_zero;
+    resp->which_response_type = zmk_template_Response_list_input_processors_tag;
+    resp->response_type.list_input_processors = (zmk_template_ListInputProcessorsResponse)
+        zmk_template_ListInputProcessorsResponse_init_zero;
 
     LOG_INF("Raised events for %d input processors", ctx.count);
     return 0;
@@ -212,9 +213,9 @@ static int handle_set_scale_multiplier(const zmk_template_SetScaleMultiplierRequ
     // Event will be raised by listener
 
     // Return empty response
-    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
-    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
-        zmk_template_SetInputProcessorResponse_init_zero;
+    resp->which_response_type = zmk_template_Response_set_scale_multiplier_tag;
+    resp->response_type.set_scale_multiplier = (zmk_template_SetScaleMultiplierResponse)
+        zmk_template_SetScaleMultiplierResponse_init_zero;
 
     return 0;
 }
@@ -249,9 +250,9 @@ static int handle_set_scale_divisor(const zmk_template_SetScaleDivisorRequest *r
     // Event will be raised by listener
 
     // Return empty response
-    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
-    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
-        zmk_template_SetInputProcessorResponse_init_zero;
+    resp->which_response_type = zmk_template_Response_set_scale_divisor_tag;
+    resp->response_type.set_scale_divisor = (zmk_template_SetScaleDivisorResponse)
+        zmk_template_SetScaleDivisorResponse_init_zero;
 
     return 0;
 }
@@ -279,9 +280,9 @@ static int handle_set_rotation(const zmk_template_SetRotationRequest *req,
     // Event will be raised by listener
 
     // Return empty response
-    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
-    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
-        zmk_template_SetInputProcessorResponse_init_zero;
+    resp->which_response_type = zmk_template_Response_set_rotation_tag;
+    resp->response_type.set_rotation = (zmk_template_SetRotationResponse)
+        zmk_template_SetRotationResponse_init_zero;
 
     return 0;
 }
@@ -309,9 +310,9 @@ static int handle_reset_input_processor(const zmk_template_ResetInputProcessorRe
     // Event will be raised by listener
 
     // Return empty response
-    resp->which_response_type = zmk_template_Response_set_input_processor_tag;
-    resp->response_type.set_input_processor = (zmk_template_SetInputProcessorResponse)
-        zmk_template_SetInputProcessorResponse_init_zero;
+    resp->which_response_type = zmk_template_Response_reset_input_processor_tag;
+    resp->response_type.reset_input_processor = (zmk_template_ResetInputProcessorResponse)
+        zmk_template_ResetInputProcessorResponse_init_zero;
 
     return 0;
 }

@@ -45,7 +45,19 @@ message ResetInputProcessorRequest {
     string name = 1;           // Name of the input processor to reset
 }
 
-message SetInputProcessorResponse {
+message SetScaleMultiplierResponse {
+    // Empty - use notification to report changes
+}
+
+message SetScaleDivisorResponse {
+    // Empty - use notification to report changes
+}
+
+message SetRotationResponse {
+    // Empty - use notification to report changes
+}
+
+message ResetInputProcessorResponse {
     // Empty - use notification to report changes
 }
 
@@ -67,8 +79,12 @@ message ErrorResponse {
 message Response {
     oneof response_type {
         ErrorResponse error = 1;
-        GetInputProcessorResponse get_input_processor = 2;
-        SetInputProcessorResponse set_input_processor = 3;
+        ListInputProcessorsResponse list_input_processors = 2;
+        GetInputProcessorResponse get_input_processor = 3;
+        SetScaleMultiplierResponse set_scale_multiplier = 4;
+        SetScaleDivisorResponse set_scale_divisor = 5;
+        SetRotationResponse set_rotation = 6;
+        ResetInputProcessorResponse reset_input_processor = 7;
     }
 }
 

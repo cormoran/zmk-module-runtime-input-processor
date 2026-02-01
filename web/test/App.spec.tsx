@@ -63,7 +63,7 @@ describe("App Component", () => {
       // Set up successful connection mock
       mocks.mockSuccessfulConnection({
         deviceName: "Test Keyboard",
-        subsystems: ["zmk__template"],
+        subsystems: ["zmk__input_proc_rt"],
       });
 
       // Mock the serial connect function to return our mock transport
@@ -93,9 +93,11 @@ describe("App Component", () => {
       expect(screen.getByText(/Disconnect/i)).toBeInTheDocument();
 
       // Verify Input Processors section is visible
-      expect(
-        screen.getByRole("heading", { name: /Input Processors/i })
-      ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(
+          screen.getByRole("heading", { name: /Input Processors/i })
+        ).toBeInTheDocument();
+      });
     });
   });
 });

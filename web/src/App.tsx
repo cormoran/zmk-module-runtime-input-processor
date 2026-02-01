@@ -18,7 +18,7 @@ import {
 } from "./proto/zmk/template/custom";
 
 // Custom subsystem identifier - must match firmware registration
-export const SUBSYSTEM_IDENTIFIER = "zmk__template";
+export const SUBSYSTEM_IDENTIFIER = "zmk__input_proc_rt";
 
 function App() {
   return (
@@ -154,24 +154,50 @@ export function InputProcessorManager() {
     setError(null);
 
     try {
-      const request = Request.create({
-        setInputProcessor: {
+      // Send separate requests for each parameter
+      // Set scale multiplier
+      const mulRequest = Request.create({
+        setScaleMultiplier: {
           name: selectedProcessor,
-          scaleMultiplier,
-          scaleDivisor,
-          rotationDegrees,
+          value: scaleMultiplier,
         },
       });
-
-      const resp = await callRPC(request);
-      if (resp?.setInputProcessor?.processor) {
-        const updated = resp.setInputProcessor.processor;
-        setProcessors((prev) =>
-          prev.map((p) => (p.name === updated.name ? updated : p))
-        );
-      } else if (resp?.error) {
-        setError(resp.error.message);
+      const mulResp = await callRPC(mulRequest);
+      if (mulResp?.error) {
+        setError(mulResp.error.message);
+        setIsLoading(false);
+        return;
       }
+
+      // Set scale divisor
+      const divRequest = Request.create({
+        setScaleDivisor: {
+          name: selectedProcessor,
+          value: scaleDivisor,
+        },
+      });
+      const divResp = await callRPC(divRequest);
+      if (divResp?.error) {
+        setError(divResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Set rotation
+      const rotRequest = Request.create({
+        setRotation: {
+          name: selectedProcessor,
+          value: rotationDegrees,
+        },
+      });
+      const rotResp = await callRPC(rotRequest);
+      if (rotResp?.error) {
+        setError(rotResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Updates will come via notifications
     } catch (err) {
       setError(
         `Failed to update processor: ${err instanceof Error ? err.message : "Unknown error"}`
@@ -340,106 +366,6 @@ export function InputProcessorManager() {
         </section>
       )}
     </>
-  );
-}
-
-export function RPCTestSection() {
-  const zmkApp = useContext(ZMKAppContext);
-  const [inputValue, setInputValue] = useState<number>(42);
-  const [response, setResponse] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  if (!zmkApp) return null;
-
-  const subsystem = zmkApp.findSubsystem(SUBSYSTEM_IDENTIFIER);
-
-  // Send a sample request to the firmware
-  const sendSampleRequest = async () => {
-    if (!zmkApp.state.connection || !subsystem) return;
-
-    setIsLoading(true);
-    setResponse(null);
-
-    try {
-      const service = new ZMKCustomSubsystem(
-        zmkApp.state.connection,
-        subsystem.index
-      );
-
-      // Create the request using ts-proto
-      const request = Request.create({
-        sample: {
-          value: inputValue,
-        },
-      });
-
-      // Encode and send the request
-      const payload = Request.encode(request).finish();
-      const responsePayload = await service.callRPC(payload);
-
-      if (responsePayload) {
-        const resp = Response.decode(responsePayload);
-        console.log("Decoded response:", resp);
-
-        if (resp.sample) {
-          setResponse(resp.sample.value);
-        } else if (resp.error) {
-          setResponse(`Error: ${resp.error.message}`);
-        }
-      }
-    } catch (error) {
-      console.error("RPC call failed:", error);
-      setResponse(
-        `Failed: ${error instanceof Error ? error.message : "Unknown error"}`
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (!subsystem) {
-    return (
-      <section className="card">
-        <div className="warning-message">
-          <p>
-            ⚠️ Subsystem "{SUBSYSTEM_IDENTIFIER}" not found. Make sure your
-            firmware includes the template module.
-          </p>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="card">
-      <h2>RPC Test</h2>
-      <p>Send a sample request to the firmware:</p>
-
-      <div className="input-group">
-        <label htmlFor="value-input">Value:</label>
-        <input
-          id="value-input"
-          type="number"
-          value={inputValue}
-          onChange={(e) => setInputValue(parseInt(e.target.value) || 0)}
-        />
-      </div>
-
-      <button
-        className="btn btn-primary"
-        disabled={isLoading}
-        onClick={sendSampleRequest}
-      >
-        {isLoading ? "⏳ Sending..." : "📤 Send Request"}
-      </button>
-
-      {response && (
-        <div className="response-box">
-          <h3>Response from Firmware:</h3>
-          <pre>{response}</pre>
-        </div>
-      )}
-    </section>
   );
 }
 
