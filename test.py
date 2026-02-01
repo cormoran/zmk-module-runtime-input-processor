@@ -40,7 +40,7 @@ class WestCommandsTests(unittest.TestCase):
 
         result = run_west(["zmk-test", "tests", '-m', '.'])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("PASS: studio", result.stdout)
+        self.assertIn("PASS: studio", result.stdout,  result.stdout + result.stderr)
 
     def test_zmk_build(self):
         artifacts_and_expected_config: dict[str, list[str | NotFound]] = {
