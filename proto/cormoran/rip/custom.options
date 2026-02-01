@@ -5,7 +5,6 @@ cormoran.rip.ErrorResponse.message   max_size:64
 
 # Runtime Input Processor field sizes
 cormoran.rip.InputProcessorInfo.name max_size:8
-cormoran.rip.ListInputProcessorsResponse.processors max_count:8
 cormoran.rip.GetInputProcessorRequest.name max_size:8
 cormoran.rip.SetScaleMultiplierRequest.name max_size:8
 cormoran.rip.SetScaleDivisorRequest.name max_size:8

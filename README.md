@@ -53,7 +53,7 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
 / {
     my_pointer_processor: my_pointer_processor {
         compatible = "zmk,input-processor-runtime";
-        name = "trackpad";  // Short name (max 16 chars)
+        processor-label = "trackpad";  // Short name (max 8 chars)
         type = <INPUT_EV_REL>;
         x-codes = <INPUT_REL_X>;
         y-codes = <INPUT_REL_Y>;
@@ -131,7 +131,7 @@ You can temporarily change input processor settings while holding a key, useful 
         temp_fast: temp_fast {
             compatible = "zmk,behavior-input-processor-temp-config";
             #binding-cells = <0>;
-            processor-name = "trackpad";  // Must match processor name
+            processor-name = "trackpad";  // Must match processor-label
             scale-multiplier = <2>;
             scale-divisor = <1>;
         };

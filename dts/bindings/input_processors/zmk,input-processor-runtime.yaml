@@ -14,7 +14,7 @@ properties:
     type: string
     required: true
     description: |
-      Short label for the input processor (max 16 chars for BLE compatibility).
+      Short label for the input processor (max 8 chars for BLE compatibility).
       Used to identify the processor in runtime configuration.
 
   type:
