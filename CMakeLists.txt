@@ -7,6 +7,12 @@ if(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR)
     target_sources(app PRIVATE src/pointing/input_processor_runtime.c)
     target_sources(app PRIVATE src/behaviors/behavior_input_processor_temp_config.c)
     target_sources(app PRIVATE src/events/input_processor_state_changed.c)
+    
+    # Add auto mouse layer feature
+    if(CONFIG_ZMK_INPUT_PROCESSOR_AUTO_MOUSE_LAYER)
+        target_sources(app PRIVATE src/pointing/input_processor_auto_mouse_layer.c)
+        target_sources(app PRIVATE src/behaviors/behavior_auto_mouse_layer_keep_active.c)
+    endif()
 
     if(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC)
         file(GLOB_RECURSE C_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/studio/*.c)

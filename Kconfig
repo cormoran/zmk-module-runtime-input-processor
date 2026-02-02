@@ -7,4 +7,12 @@ config ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC
     bool "Enable runtime input processor custom Studio RPC"
     depends on ZMK_STUDIO
 
+config ZMK_INPUT_PROCESSOR_AUTO_MOUSE_LAYER
+    bool "Auto Mouse Layer Input Processor"
+    default y
+    depends on DT_HAS_ZMK_INPUT_PROCESSOR_AUTO_MOUSE_LAYER_ENABLED
+    help
+      Enable automatic activation of a mouse layer when pointer input is detected,
+      with automatic deactivation on inactivity or when trans/none keys are pressed.
+
 endif

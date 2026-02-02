@@ -1,0 +1,18 @@
+/*
+ * Copyright (c) 2026 The ZMK Contributors
+ * SPDX-License-Identifier: MIT
+ *
+ * Auto Mouse Layer Behaviors
+ *
+ * This file provides the behavior to keep the auto mouse layer active.
+ */
+
+/ {
+    behaviors {
+        /omit-if-no-ref/
+        amlka: auto_mouse_layer_keep_active {
+            compatible = "zmk,behavior-auto-mouse-layer-keep-active";
+            #binding-cells = <0>;
+        };
+    };
+};

@@ -1,0 +1,35 @@
+# Copyright (c) 2026 The ZMK Contributors
+# SPDX-License-Identifier: MIT
+
+description: |
+  Input Processor for automatically enabling a mouse layer when pointer movement
+  is detected, with configurable idle time requirements and automatic deactivation.
+
+compatible: "zmk,input-processor-auto-mouse-layer"
+
+include: base.yaml
+
+properties:
+  layer:
+    type: int
+    required: true
+    description: Layer index to activate when pointer input is detected
+
+  require-prior-idle-ms:
+    type: int
+    required: false
+    default: 0
+    description: |
+      Time in milliseconds that must pass after the last keystroke before the 
+      layer can be activated. Set to 0 to disable this check.
+
+  time-to-max-ms:
+    type: int
+    required: false
+    default: 600
+    description: |
+      Time in milliseconds to wait after pointer input stops before deactivating 
+      the layer. Set to 0 to disable automatic deactivation.
+
+  "#input-processor-cells":
+    const: 0
