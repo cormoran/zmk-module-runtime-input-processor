@@ -12,6 +12,7 @@ This ZMK module provides runtime configurable input processors for pointing devi
 - **Multiple Processors**: Support for multiple input processors with individual configuration
 - **Short Names**: Processor names limited to 8 characters for BLE efficiency
 - **Temporary Changes**: Hold a key to temporarily change settings (perfect for DPI toggle)
+- **Auto Mouse Layer**: Automatically activate a layer when using pointing devices with smart deactivation
 
 ## Setup
 
@@ -165,6 +166,87 @@ When you press and hold a key with the temporary config behavior:
 1. Current settings are saved
 2. Temporary settings are applied
 3. When you release the key, original settings are restored
+
+### Auto Mouse Layer
+
+The auto mouse layer feature automatically activates a specified layer when pointer movement is detected, and deactivates it after a period of inactivity. This is useful for keyboards with integrated trackpads or trackballs where you want mouse-specific bindings available only when using the pointing device.
+
+**Key Features:**
+- Automatic layer activation on pointer input
+- Configurable idle time requirement before activation (prevents accidental activation while typing)
+- Automatic deactivation after inactivity timeout
+- Deactivation when pressing keys mapped to `&trans` or `&none`
+- Behavior to keep the layer active while held
+
+**Configuration Example:**
+
+```dts
+#include <dt-bindings/zmk/input.h>
+#include <behaviors/auto-mouse-layer.dtsi>  // Include the auto mouse behavior
+
+/ {
+    // Define the auto mouse layer processor
+    auto_mouse_processor: auto_mouse_processor {
+        compatible = "zmk,input-processor-auto-mouse-layer";
+        layer = <1>;                    // Layer index to activate (mouse_layer)
+        require-prior-idle-ms = <150>;  // Wait 150ms after last keystroke
+        time-to-max-ms = <600>;         // Deactivate after 600ms of no pointer input
+        
+        #input-processor-cells = <0>;
+    };
+
+    // Attach processor to your input device
+    my_input_listener {
+        // ... other config ...
+        input-processors = <&auto_mouse_processor>;
+    };
+
+    keymap {
+        compatible = "zmk,keymap";
+        
+        default_layer {
+            bindings = <
+                &kp A    &kp B    &kp C
+                &kp D    &kp E    &kp F
+            >;
+        };
+        
+        // Layer 1: Mouse layer (auto-activated)
+        mouse_layer {
+            bindings = <
+                &mkp LCLK  &mkp RCLK  &amlka    // &amlka keeps layer active
+                &trans     &trans     &none     // trans/none deactivate layer
+            >;
+        };
+    };
+};
+```
+
+**Behavior: Keep Auto Mouse Layer Active (`&amlka`)**
+
+While holding a key with the `&amlka` behavior, the auto mouse layer will not be automatically deactivated due to inactivity. This is useful for actions that require the mouse layer to remain active, such as:
+- Clicking and dragging
+- Long mouse operations
+- Temporary mouse mode toggle
+
+```dts
+mouse_layer {
+    bindings = <
+        &amlka      // Hold to keep layer active
+        &mkp LCLK   // Left click
+        &mkp RCLK   // Right click
+    >;
+};
+```
+
+**How It Works:**
+
+1. When pointer input is detected (e.g., trackpad movement), the layer is activated
+   - Only if `require-prior-idle-ms` has elapsed since the last key press
+2. The layer remains active while pointer input continues
+3. After `time-to-max-ms` milliseconds of no pointer input, the layer deactivates
+4. Pressing a key mapped to `&trans` or `&none` immediately deactivates the layer
+5. While `&amlka` is held, automatic deactivation is prevented
 
 ## Development Guide
 
