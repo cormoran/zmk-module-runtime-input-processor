@@ -2,7 +2,7 @@ include:
   - artifact: my_awesome_keyboard_with_custom_rpc_support
     board: seeeduino_xiao_ble
     shield: my_awesome_keyboard
-    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y
     snippet: studio-rpc-usb-uart
 
   - artifact: my_awesome_keyboard_without_custom_rpc_support

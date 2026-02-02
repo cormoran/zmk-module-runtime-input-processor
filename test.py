@@ -40,21 +40,21 @@ class WestCommandsTests(unittest.TestCase):
 
         result = run_west(["zmk-test", "tests", '-m', '.'])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("PASS: studio", result.stdout,  result.stdout + result.stderr)
+        self.assertIn("PASS: studio", result.stdout)
 
     def test_zmk_build(self):
         artifacts_and_expected_config: dict[str, list[str | NotFound]] = {
             "my_awesome_keyboard_with_custom_rpc_support": [
                 "CONFIG_MY_AWESOME_KEYBOARD_SPECIAL_FEATURE=y",
                 "CONFIG_ZMK_STUDIO=y",
-                "CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR=y",
-                "CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y",
+                "CONFIG_ZMK_TEMPLATE_FEATURE=y",
+                "CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y",
             ],
             "my_awesome_keyboard_without_custom_rpc_support": [
                 "CONFIG_MY_AWESOME_KEYBOARD_SPECIAL_FEATURE=y",
                 "# CONFIG_ZMK_STUDIO is not set",
-                "CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR=y",
-                NotFound("CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC"),
+                "CONFIG_ZMK_TEMPLATE_FEATURE=y",
+                NotFound("CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC"),
             ]
         }
 

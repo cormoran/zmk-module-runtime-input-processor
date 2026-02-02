@@ -1,170 +1,78 @@
-# ZMK Runtime Input Processor Module
+# ZMK Module Template with Custom Web UI
 
-This ZMK module provides runtime configurable input processors for pointing devices. You can adjust scaling and rotation parameters dynamically through a web interface without rebuilding firmware.
+This repository contains a template for a ZMK module with Web UI by using
+**unofficial** custom studio rpc protocol.
 
-## Features
+Basic usage is the same to official template. Read through the
+[ZMK Module Creation](https://zmk.dev/docs/development/module-creation) page for
+details on how to configure this template.
 
-- **Runtime Configuration**: Adjust input processor parameters without rebuilding firmware
-- **Web Interface**: Configure settings through a browser-based UI (currently being updated)
-- **Scaling Support**: Configure speed multipliers (e.g., x2 faster, x0.5 slower)
-- **Rotation Support**: Apply rotation transformations in degrees (fully implemented with paired X/Y handling)
-- **Persistent Settings**: Settings saved to non-volatile storage
-- **Multiple Processors**: Support for multiple input processors with individual configuration
-- **Short Names**: Processor names limited to 8 characters for BLE efficiency
-- **Temporary Changes**: Hold a key to temporarily change settings (perfect for DPI toggle)
+### Supporting custom studio RPC protocol
 
-## Setup
+This template contains sample implementation. Please edit and rename below files
+to implement your protocol.
 
-### 1. Add dependency to your `config/west.yml`
+- proto `proto/zmk/template/custom.proto` and `custom.options`
+- handler `src/studio/custom_handler.c`
+- flags in `Kconfig`
+- test `./tests/studio`
 
-```yaml
-manifest:
-  remotes:
-    - name: cormoran
-      url-base: https://github.com/cormoran
-  projects:
-    - name: zmk-module-runtime-input-processor
-      remote: cormoran
-      revision: main # or latest commit hash
-    # Below setting required to use unofficial studio custom RPC feature
-    - name: zmk
-      remote: cormoran
-      revision: v0.3+custom-studio-protocol
-      import:
-        file: app/west.yml
-```
+### Implementing Web UI for the custom protocol
 
-### 2. Enable the feature in your `config/<shield>.conf`
+`./web` contains boilerplate based on
+[vite template `react-ts`](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts)
+(`npm create vite@latest web -- --template react-ts`) and react hook library
+[@cormoran/react-zmk-studio](https://github.com/cormoran/react-zmk-studio).
 
-```conf
-# Enable runtime input processor
-CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR=y
+Please refer
+[react-zmk-studio README](https://github.com/cormoran/react-zmk-studio/blob/main/README.md).
 
-# Enable studio custom RPC features for web UI
-CONFIG_ZMK_STUDIO=y
-CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
-```
+## Setup (Please edit!)
 
-### 3. Add runtime input processor to your keymap
+You can use this zmk-module with below setup.
 
-```dts
-#include <dt-bindings/zmk/input.h>
+1. Add dependency to your `config/west.yml`.
 
-/ {
-    my_pointer_processor: my_pointer_processor {
-        compatible = "zmk,input-processor-runtime";
-        processor-label = "trackpad";  // Short name (max 8 chars)
-        type = <INPUT_EV_REL>;
-        x-codes = <INPUT_REL_X>;
-        y-codes = <INPUT_REL_Y>;
-        scale-multiplier = <1>;
-        scale-divisor = <1>;
-        rotation-degrees = <0>;
-        track-remainders;
-    };
+   ```yaml:config/west.yml
+   # Please update with your account and repository name after create repository from template
+   manifest:
+   remotes:
+       ...
+       - name: cormoran
+       url-base: https://github.com/cormoran
+   projects:
+       ...
+       - name: zmk-module-template-with-custom-studio-rpc
+       remote: cormoran
+       revision: main # or latest commit hash
+       # import: true # if this module has other dependencies
+       ...
+       # Below setting required to use unofficial studio custom PRC feature
+       - name: zmk
+       remote: cormoran
+       revision: v0.3+custom-studio-protocol
+       import:
+           file: app/west.yml
+   ```
 
-    // Then use it in your input device configuration
-    my_input_listener {
-        // ... other config ...
-        input-processors = <&my_pointer_processor>;
-    };
+1. Enable flag in your `config/<shield>.conf`
 
-    // For split keyboard, you can configure input processor in central
-    split_input: split_input {
-        compatible = "zmk,input-split"
-    };
-    split_listener: split_listener {
-        compatible = "zmk,input-listener";
-        status = <disabled>;
-        device = <&split_input>;
-    };
-};
+   ```conf:<shield>.conf
+   # Enable standalone features
+   CONFIG_ZMK_TEMPLATE_FEATURE=y
 
-// <central>.overlay
-&split_listener {
-    status = "okay";
-    input-processors = <&my_pointer_processor>;
-};
-```
+   # Optionally enable studio custom RPC features
+   CONFIG_ZMK_STUDIO=y
+   CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y
+   ```
 
-## Usage
+1. Update your `<keyboard>.keymap` like .....
 
-### Web Interface
-
-1. Build and flash your firmware with the runtime input processor enabled
-2. Connect to your keyboard via Web Serial (Chrome/Edge)
-3. The web interface will automatically detect available input processors
-4. Adjust scaling and rotation parameters
-5. Changes are applied immediately without restarting
-
-### Configuration Parameters
-
-- **Scaling Multiplier/Divisor**: Controls pointer speed
-  - Example: `2/1` = 2x faster, `1/2` = 0.5x slower
-  - Values are applied as: `output = input * multiplier / divisor`
-  - Remainders are tracked for precise scaling
-
-### Example Configurations
-
-**2x Speed:**
-
-```
-scale-multiplier = 2
-scale-divisor = 1
-```
-
-**Half Speed:**
-
-```
-scale-multiplier = 1
-scale-divisor = 2
-```
-
-### Temporary Configuration via Behavior
-
-You can temporarily change input processor settings while holding a key, useful for temporary DPI changes:
-
-```dts
-/ {
-    behaviors {
-        // Behavior to temporarily double the pointer speed
-        temp_fast: temp_fast {
-            compatible = "zmk,behavior-input-processor-temp-config";
-            #binding-cells = <0>;
-            processor-name = "trackpad";  // Must match processor-label
-            scale-multiplier = <2>;
-            scale-divisor = <1>;
-        };
-
-        // Behavior to temporarily halve the pointer speed
-        temp_slow: temp_slow {
-            compatible = "zmk,behavior-input-processor-temp-config";
-            #binding-cells = <0>;
-            processor-name = "trackpad";
-            scale-multiplier = <1>;
-            scale-divisor = <2>;
-        };
-    };
-
-    keymap {
-        compatible = "zmk,keymap";
-        default_layer {
-            bindings = <
-                // Use &temp_fast in your keymap
-                &temp_fast  // Hold this key for 2x speed
-                &temp_slow  // Hold this key for 0.5x speed
-                // ... other keys
-            >;
-        };
-    };
-};
-```
-
-When you press and hold a key with the temporary config behavior:
-
-1. Current settings are saved
-2. Temporary settings are applied
-3. When you release the key, original settings are restored
+   ```
+   / {
+       ...
+   }
+   ```
 
 ## Development Guide
 
@@ -294,6 +202,7 @@ Then, the Web UI will be available in
 For previewing web UI changes in pull requests:
 
 1. Create a Cloudflare Workers project and configure secrets:
+
    - `CLOUDFLARE_API_TOKEN`: API token with Cloudflare Pages edit permission
    - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
    - (Optional) `CLOUDFLARE_PROJECT_NAME`: Project name (defaults to `zmk-module-web-ui`)

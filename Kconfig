@@ -1,10 +1,10 @@
-config ZMK_RUNTIME_INPUT_PROCESSOR
-    bool "Enable runtime input processor feature"
+config ZMK_TEMPLATE_FEATURE
+    bool "Enable template feature"
 
-if ZMK_RUNTIME_INPUT_PROCESSOR
+if ZMK_TEMPLATE_FEATURE
 
-config ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC
-    bool "Enable runtime input processor custom Studio RPC"
+config ZMK_TEMPLATE_FEATURE_STUDIO_RPC
+    bool "Enable template feature custom Studio RPC"
     depends on ZMK_STUDIO
 
 endif

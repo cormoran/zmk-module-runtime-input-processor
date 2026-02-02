@@ -1,8 +1,5 @@
 #include <physical_layouts.dtsi>
 #include <dt-bindings/zmk/matrix_transform.h>
-#include <dt-bindings/zmk/pointing.h>
-#include <zephyr/dt-bindings/input/input-event-codes.h>
-
 / {
 	physical_layout: physical_layout {
 		compatible = "zmk,physical-layout";
@@ -23,27 +20,11 @@
 		RC(0,0)  RC(0,1)  RC(1,0)  RC(1, 1)
 		>;
 	};
-	
-	runtime_input_processor: runtime_input_processor {
-		compatible = "zmk,input-processor-runtime";
-		processor-label = "default";
-		type = <INPUT_EV_REL>;
-		x-codes = <INPUT_REL_X>;
-		y-codes = <INPUT_REL_Y>;
-		track-remainders;
-		
-		#input-processor-cells = <0>;
-	};
 };
 
 #include <dt-bindings/zmk/keys.h>
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/kscan_mock.h>
-#include <behaviors/runtime-input-processors.dtsi>
-
-&mmv_input_listener {
-	input-processors = <&runtime_input_processor>;
-};
 
 / {
 	keymap {
@@ -51,10 +32,10 @@
 		
 		default_layer {
 			bindings = <
-			&mmv MOVE_UP
-			&hdpi
-			&ldpi
-			&mmv MOVE_RIGHT
+			&kp A
+			&kp A
+			&kp A
+			&kp A
 			>;
 		};
 	};
@@ -64,15 +45,7 @@
 	events = <
 	ZMK_MOCK_PRESS(0,0,10)
 	ZMK_MOCK_RELEASE(0,0,10)
-	// High DPI
-	ZMK_MOCK_PRESS(0,1,10)
 	ZMK_MOCK_PRESS(0,0,10)
 	ZMK_MOCK_RELEASE(0,0,10)
-	ZMK_MOCK_RELEASE(0,1,10)
-	// Low DPI
-	ZMK_MOCK_PRESS(1,0,10)
-	ZMK_MOCK_PRESS(0,0,10)
-	ZMK_MOCK_RELEASE(0,0,10)
-	ZMK_MOCK_RELEASE(1,0,10)
 	>;
 };

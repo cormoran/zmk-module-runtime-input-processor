@@ -38,7 +38,7 @@ src/
 ├── App.tsx               # Main application with connection UI
 ├── App.css               # Styles
 └── proto/                # Generated protobuf TypeScript types
-    └── cormoran/rip/
+    └── zmk/template/
         └── custom.ts
 
 test/
@@ -50,7 +50,7 @@ test/
 
 ### 1. Protocol Definition
 
-The protobuf schema is defined in `../proto/cormoran/rip/custom.proto`:
+The protobuf schema is defined in `../proto/zmk/template/custom.proto`:
 
 ```proto
 message Request {
@@ -150,7 +150,7 @@ See the test files in `./test/` for complete examples.
 
 To adapt this template for your own ZMK module:
 
-1. **Update the proto file**: Modify `../proto/cormoran/rip/custom.proto` with
+1. **Update the proto file**: Modify `../proto/zmk/template/custom.proto` with
    your message types
 2. **Regenerate types**: Run `npm run generate`
 3. **Update subsystem identifier**: Change `SUBSYSTEM_IDENTIFIER` in `App.tsx`

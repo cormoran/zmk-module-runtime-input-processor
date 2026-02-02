@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package zmk.template;
+
+message SampleRequest {
+    int32 value = 1;
+}
+
+message SampleResponse {
+    string value = 1;
+}
+
+message Request {
+    oneof request_type {
+        SampleRequest sample = 1;
+    }
+}
+
+message ErrorResponse {
+    string message = 1;
+}
+
+message Response {
+    oneof response_type {
+        ErrorResponse error = 1;
+        SampleResponse sample = 2;
+    }
+}

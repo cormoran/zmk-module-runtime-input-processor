@@ -27,12 +27,8 @@ describe("App Component", () => {
       render(<App />);
 
       // Check for the main title
-      expect(
-        screen.getByText(/ZMK Runtime Input Processor/i)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/Configure input processor settings at runtime/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/ZMK Module Template/i)).toBeInTheDocument();
+      expect(screen.getByText(/Custom Studio RPC Demo/i)).toBeInTheDocument();
     });
 
     it("should render connection button when disconnected", () => {
@@ -46,9 +42,7 @@ describe("App Component", () => {
       render(<App />);
 
       // Check for footer text
-      expect(
-        screen.getByText(/Runtime Input Processor Module/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Template Module/i)).toBeInTheDocument();
     });
   });
 
@@ -63,7 +57,7 @@ describe("App Component", () => {
       // Set up successful connection mock
       mocks.mockSuccessfulConnection({
         deviceName: "Test Keyboard",
-        subsystems: ["cormoran_rip"],
+        subsystems: ["zmk__template"],
       });
 
       // Mock the serial connect function to return our mock transport
@@ -92,12 +86,8 @@ describe("App Component", () => {
       // Verify disconnect button is now available
       expect(screen.getByText(/Disconnect/i)).toBeInTheDocument();
 
-      // Verify Input Processors section is visible
-      await waitFor(() => {
-        expect(
-          screen.getByRole("heading", { name: /Input Processors/i })
-        ).toBeInTheDocument();
-      });
+      // Verify RPC test section is visible
+      expect(screen.getByText(/RPC Test/i)).toBeInTheDocument();
     });
   });
 });
