@@ -90,6 +90,14 @@ export function InputProcessorManager() {
   const [scaleDivisor, setScaleDivisor] = useState<number>(1);
   const [rotationDegrees, setRotationDegrees] = useState<number>(0);
 
+  // Auto-mouse layer state
+  const [autoMouseEnabled, setAutoMouseEnabled] = useState<boolean>(false);
+  const [autoMouseLayer, setAutoMouseLayer] = useState<number>(0);
+  const [autoMouseActivationDelay, setAutoMouseActivationDelay] =
+    useState<number>(100);
+  const [autoMouseDeactivationDelay, setAutoMouseDeactivationDelay] =
+    useState<number>(500);
+
   const subsystem = useMemo(
     () => zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,6 +202,23 @@ export function InputProcessorManager() {
         return;
       }
 
+      // Set auto-mouse configuration
+      const autoMouseRequest = Request.create({
+        setAutoMouse: {
+          name: selectedProcessor,
+          enabled: autoMouseEnabled,
+          layer: autoMouseLayer,
+          activationDelayMs: autoMouseActivationDelay,
+          deactivationDelayMs: autoMouseDeactivationDelay,
+        },
+      });
+      const autoMouseResp = await callRPC(autoMouseRequest);
+      if (autoMouseResp?.error) {
+        setError(autoMouseResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
       // Updates will come via notifications
     } catch (err) {
       setError(
@@ -208,6 +233,10 @@ export function InputProcessorManager() {
     scaleMultiplier,
     scaleDivisor,
     rotationDegrees,
+    autoMouseEnabled,
+    autoMouseLayer,
+    autoMouseActivationDelay,
+    autoMouseDeactivationDelay,
   ]);
 
   const selectProcessor = useCallback(
@@ -218,6 +247,10 @@ export function InputProcessorManager() {
         setScaleMultiplier(proc.scaleMultiplier);
         setScaleDivisor(proc.scaleDivisor);
         setRotationDegrees(proc.rotationDegrees);
+        setAutoMouseEnabled(proc.autoMouseEnabled);
+        setAutoMouseLayer(proc.autoMouseLayer);
+        setAutoMouseActivationDelay(proc.autoMouseActivationDelayMs);
+        setAutoMouseDeactivationDelay(proc.autoMouseDeactivationDelayMs);
       }
     },
     [processors]
@@ -263,6 +296,10 @@ export function InputProcessorManager() {
               setScaleMultiplier(proc.scaleMultiplier);
               setScaleDivisor(proc.scaleDivisor);
               setRotationDegrees(proc.rotationDegrees);
+              setAutoMouseEnabled(proc.autoMouseEnabled);
+              setAutoMouseLayer(proc.autoMouseLayer);
+              setAutoMouseActivationDelay(proc.autoMouseActivationDelayMs);
+              setAutoMouseDeactivationDelay(proc.autoMouseDeactivationDelayMs);
             }
 
             // If no processor is selected yet, select the first one
@@ -271,6 +308,10 @@ export function InputProcessorManager() {
               setScaleMultiplier(proc.scaleMultiplier);
               setScaleDivisor(proc.scaleDivisor);
               setRotationDegrees(proc.rotationDegrees);
+              setAutoMouseEnabled(proc.autoMouseEnabled);
+              setAutoMouseLayer(proc.autoMouseLayer);
+              setAutoMouseActivationDelay(proc.autoMouseActivationDelayMs);
+              setAutoMouseDeactivationDelay(proc.autoMouseDeactivationDelayMs);
             }
           }
         } catch (err) {
@@ -348,6 +389,8 @@ export function InputProcessorManager() {
                 >
                   Scale: {proc.scaleMultiplier}/{proc.scaleDivisor} | Rotation:{" "}
                   {proc.rotationDegrees}°
+                  {proc.autoMouseEnabled &&
+                    ` | Auto-Mouse: Layer ${proc.autoMouseLayer}`}
                 </div>
               </div>
             ))}
@@ -413,6 +456,103 @@ export function InputProcessorManager() {
               }
             />
           </div>
+
+          <hr style={{ margin: "1.5rem 0", border: "1px solid #e0e0e0" }} />
+
+          <h3>Auto-Mouse Layer</h3>
+          <p style={{ fontSize: "0.9em", color: "#666", marginBottom: "1rem" }}>
+            Automatically activate a layer when using the pointing device
+          </p>
+
+          <div className="input-group">
+            <label htmlFor="auto-mouse-enabled">
+              <input
+                id="auto-mouse-enabled"
+                type="checkbox"
+                checked={autoMouseEnabled}
+                onChange={(e) => setAutoMouseEnabled(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Enable Auto-Mouse Layer
+            </label>
+          </div>
+
+          {autoMouseEnabled && (
+            <>
+              <div className="input-group">
+                <label htmlFor="auto-mouse-layer">Target Layer:</label>
+                <input
+                  id="auto-mouse-layer"
+                  type="number"
+                  min="0"
+                  max="15"
+                  value={autoMouseLayer}
+                  onChange={(e) =>
+                    setAutoMouseLayer(parseInt(e.target.value) || 0)
+                  }
+                />
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Layer number to activate (0-15)
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="activation-delay">Activation Delay (ms):</label>
+                <input
+                  id="activation-delay"
+                  type="number"
+                  min="0"
+                  max="5000"
+                  step="10"
+                  value={autoMouseActivationDelay}
+                  onChange={(e) =>
+                    setAutoMouseActivationDelay(parseInt(e.target.value) || 0)
+                  }
+                />
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Delay before activating layer (0-5000ms)
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="deactivation-delay">
+                  Deactivation Delay (ms):
+                </label>
+                <input
+                  id="deactivation-delay"
+                  type="number"
+                  min="0"
+                  max="5000"
+                  step="10"
+                  value={autoMouseDeactivationDelay}
+                  onChange={(e) =>
+                    setAutoMouseDeactivationDelay(parseInt(e.target.value) || 0)
+                  }
+                />
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Delay before deactivating layer after input stops (0-5000ms)
+                </div>
+              </div>
+            </>
+          )}
 
           <button
             className="btn btn-primary"
