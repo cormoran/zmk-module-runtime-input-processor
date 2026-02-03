@@ -8,7 +8,7 @@
 
 #include <dt-bindings/zmk/pointing.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
-#include "behaviors/runtime-input-processors.dtsi"
+#include "behaviors/runtime-input-processor.dtsi"
 
 &physical_layout0 {
 	transform = <&transform0>;
@@ -49,7 +49,7 @@
 	
 	mouse_input_processor: mouse_input_processor {
 		compatible = "zmk,input-processor-runtime";
-		processor-label = "default";
+		processor-label = "mouse2";
 		type = <INPUT_EV_REL>;
 		x-codes = <INPUT_REL_X>;
 		y-codes = <INPUT_REL_Y>;
@@ -57,15 +57,5 @@
 		
 		#input-processor-cells = <0>;
 	};
-	
-	scroll_input_processor: scroll_input_processor {
-		compatible = "zmk,input-processor-runtime";
-		processor-label = "scroll";
-		type = <INPUT_EV_REL>;
-		x-codes = <INPUT_REL_HWHEEL>;
-		y-codes = <INPUT_REL_WHEEL>;
-		track-remainders;
-		
-		#input-processor-cells = <0>;
-	};
 };
+

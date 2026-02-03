@@ -39,7 +39,7 @@
 #include <dt-bindings/zmk/keys.h>
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/kscan_mock.h>
-#include <behaviors/runtime-input-processors.dtsi>
+#include <behaviors/runtime-input-processor.dtsi>
 
 &mmv_input_listener {
 	input-processors = <&runtime_input_processor>;

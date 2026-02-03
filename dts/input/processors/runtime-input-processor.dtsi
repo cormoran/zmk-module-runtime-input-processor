@@ -1,0 +1,51 @@
+/*
+* Copyright (c) 2026 The ZMK Contributors
+* SPDX-License-Identifier: MIT
+*
+* Default Runtime Input Processor Definitions
+*
+*/
+
+#include <dt-bindings/zmk/keys.h>
+
+/ {
+	
+	/omit-if-no-ref/
+	mouse_runtime_input_processor: mouse_runtime_input_processor {
+		compatible = "zmk,input-processor-runtime";
+		processor-label = "mouse";
+		type = <INPUT_EV_REL>;
+		x-codes = <INPUT_REL_X>;
+		y-codes = <INPUT_REL_Y>;
+		scale-multiplier = <1>;
+		scale-divisor = <1>;
+		rotation-degrees = <0>;
+		track-remainders;
+		
+		auto-mouse-transparent-behavior = <&trans>;
+		auto-mouse-kp-behavior = <&kp>;
+		auto-mouse-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+		
+		#input-processor-cells = <0>;
+	};
+	
+	/omit-if-no-ref/
+	scroll_runtime_input_processor: scroll_runtime_input_processor {
+		compatible = "zmk,input-processor-runtime";
+		processor-label = "scroll";
+		type = <INPUT_EV_REL>;
+		x-codes = <INPUT_REL_HWHEEL>;
+		y-codes = <INPUT_REL_WHEEL>;
+		// 1/60
+		scale-multiplier = <1>;
+		scale-divisor = <60>;
+		rotation-degrees = <0>;
+		track-remainders;
+		
+		auto-mouse-transparent-behavior = <&trans>;
+		auto-mouse-kp-behavior = <&kp>;
+		auto-mouse-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+		
+		#input-processor-cells = <0>;
+	};
+};
