@@ -183,9 +183,37 @@ Auto-mouse layer settings can be configured through the web interface:
 
 - When you move the pointing device, the layer activates after the activation delay
 - The layer stays active while you continue using the pointing device
-- When you press any keyboard key, the layer deactivates immediately
+- When you press any keyboard key, the layer deactivates immediately (unless it's a modifier or the key is on the auto-mouse layer)
 - If you stop moving the pointing device, the layer deactivates after the deactivation delay
 - If a key press occurs before the activation delay expires, the layer won't activate
+
+**Performance Optimization (Optional):**
+
+For better performance, you can configure behavior references and modifier keycodes in the device tree to avoid string comparisons:
+
+```dts
+#include <dt-bindings/zmk/keys.h>
+
+/ {
+    my_pointer_processor: my_pointer_processor {
+        compatible = "zmk,input-processor-runtime";
+        processor-label = "trackpad";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        track-remainders;
+        
+        // Optional: Behavior references for efficient comparison
+        auto-mouse-transparent-behavior = <&trans>;
+        auto-mouse-kp-behavior = <&kp>;
+        
+        // Optional: Modifier keycodes that won't deactivate auto-mouse layer
+        auto-mouse-keep-keycodes = <LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI>;
+    };
+};
+```
+
+These properties are entirely optional - the implementation will fall back to string comparisons and automatic modifier detection if not specified.
 
 **Keep Auto-Mouse Layer Active:**
 

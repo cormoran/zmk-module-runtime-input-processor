@@ -38,6 +38,11 @@ struct runtime_processor_config {
     uint32_t initial_scale_multiplier;
     uint32_t initial_scale_divisor;
     int32_t initial_rotation_degrees;
+    // Auto-mouse behavior references for efficient comparison
+    const struct device *auto_mouse_transparent_behavior;
+    const struct device *auto_mouse_kp_behavior;
+    size_t auto_mouse_keep_keycodes_len;
+    const uint16_t *auto_mouse_keep_keycodes;
 };
 
 struct runtime_processor_data {
@@ -590,6 +595,9 @@ int zmk_input_processor_runtime_get_config(
     BUILD_ASSERT(                                                              \
         ARRAY_SIZE(runtime_x_codes_##n) == ARRAY_SIZE(runtime_y_codes_##n),    \
         "X and Y codes need to be the same size");                             \
+    COND_CODE_1(DT_INST_NODE_HAS_PROP(n, auto_mouse_keep_keycodes),            \
+        (static const uint16_t runtime_auto_mouse_keep_keycodes_##n[] =        \
+            DT_INST_PROP(n, auto_mouse_keep_keycodes);), ())                   \
     static const struct runtime_processor_config runtime_config_##n = {        \
         .name                     = DT_INST_PROP(n, processor_label),          \
         .type                     = DT_INST_PROP_OR(n, type, INPUT_EV_REL),    \
@@ -600,6 +608,20 @@ int zmk_input_processor_runtime_get_config(
         .initial_scale_multiplier = DT_INST_PROP_OR(n, scale_multiplier, 1),   \
         .initial_scale_divisor    = DT_INST_PROP_OR(n, scale_divisor, 1),      \
         .initial_rotation_degrees = DT_INST_PROP_OR(n, rotation_degrees, 0),   \
+        .auto_mouse_transparent_behavior = COND_CODE_1(                        \
+            DT_INST_NODE_HAS_PROP(n, auto_mouse_transparent_behavior),         \
+            (DEVICE_DT_GET(DT_INST_PHANDLE(n, auto_mouse_transparent_behavior))), \
+            (NULL)),                                                           \
+        .auto_mouse_kp_behavior = COND_CODE_1(                                 \
+            DT_INST_NODE_HAS_PROP(n, auto_mouse_kp_behavior),                  \
+            (DEVICE_DT_GET(DT_INST_PHANDLE(n, auto_mouse_kp_behavior))),       \
+            (NULL)),                                                           \
+        .auto_mouse_keep_keycodes_len = COND_CODE_1(                           \
+            DT_INST_NODE_HAS_PROP(n, auto_mouse_keep_keycodes),                \
+            (DT_INST_PROP_LEN(n, auto_mouse_keep_keycodes)), (0)),             \
+        .auto_mouse_keep_keycodes = COND_CODE_1(                               \
+            DT_INST_NODE_HAS_PROP(n, auto_mouse_keep_keycodes),                \
+            (runtime_auto_mouse_keep_keycodes_##n), (NULL)),                   \
     };                                                                         \
     static struct runtime_processor_data runtime_data_##n;                     \
     DEVICE_DT_INST_DEFINE(n, &runtime_processor_init, NULL, &runtime_data_##n, \
@@ -706,6 +728,7 @@ static int position_state_changed_listener(const zmk_event_t *eh) {
     // Check auto-mouse deactivation for all processors
     for (size_t i = 0; i < runtime_processors_count; i++) {
         const struct device *dev = runtime_processors[i];
+        const struct runtime_processor_config *cfg = dev->config;
         struct runtime_processor_data *data = dev->data;
         
         // Check if auto-mouse layer should be deactivated
@@ -720,12 +743,24 @@ static int position_state_changed_listener(const zmk_event_t *eh) {
             zmk_keymap_get_layer_binding_at_idx(auto_mouse_layer_id, ev->position);
         
         // If auto-mouse layer has non-transparent binding, don't deactivate
-        if (auto_mouse_binding && 
-            strcmp(auto_mouse_binding->behavior_dev, "trans") != 0 &&
-            strcmp(auto_mouse_binding->behavior_dev, "TRANS") != 0) {
-            LOG_DBG("Auto-mouse layer has non-transparent binding at position %d, not deactivating", 
-                    ev->position);
-            continue;
+        // Use device pointer comparison if transparent behavior is configured
+        bool is_transparent = false;
+        if (auto_mouse_binding) {
+            if (cfg->auto_mouse_transparent_behavior) {
+                // Efficient device pointer comparison
+                const struct device *binding_dev = zmk_behavior_get_binding(auto_mouse_binding->behavior_dev);
+                is_transparent = (binding_dev == cfg->auto_mouse_transparent_behavior);
+            } else {
+                // Fallback to string comparison if not configured
+                is_transparent = (strcmp(auto_mouse_binding->behavior_dev, "trans") == 0 ||
+                                 strcmp(auto_mouse_binding->behavior_dev, "TRANS") == 0);
+            }
+            
+            if (!is_transparent) {
+                LOG_DBG("Auto-mouse layer has non-transparent binding at position %d, not deactivating", 
+                        ev->position);
+                continue;
+            }
         }
         
         // Auto-mouse binding is transparent, check the resolved binding
@@ -746,30 +781,62 @@ static int position_state_changed_listener(const zmk_event_t *eh) {
             const struct zmk_behavior_binding *binding = 
                 zmk_keymap_get_layer_binding_at_idx(layer_id, ev->position);
             
-            if (binding && 
-                strcmp(binding->behavior_dev, "trans") != 0 &&
-                strcmp(binding->behavior_dev, "TRANS") != 0) {
-                resolved_binding = binding;
-                break;
+            if (binding) {
+                bool binding_is_transparent = false;
+                if (cfg->auto_mouse_transparent_behavior) {
+                    const struct device *binding_dev = zmk_behavior_get_binding(binding->behavior_dev);
+                    binding_is_transparent = (binding_dev == cfg->auto_mouse_transparent_behavior);
+                } else {
+                    binding_is_transparent = (strcmp(binding->behavior_dev, "trans") == 0 ||
+                                             strcmp(binding->behavior_dev, "TRANS") == 0);
+                }
+                
+                if (!binding_is_transparent) {
+                    resolved_binding = binding;
+                    break;
+                }
             }
         }
         
         // If resolved binding is &kp with a modifier keycode, don't deactivate
-        if (resolved_binding &&
-            (strcmp(resolved_binding->behavior_dev, "kp") == 0 ||
-             strcmp(resolved_binding->behavior_dev, "KEY_PRESS") == 0)) {
-            // The param1 contains the keycode for &kp behavior
-            uint32_t keycode_encoded = resolved_binding->param1;
-            uint16_t usage_page = ZMK_HID_USAGE_PAGE(keycode_encoded);
-            uint16_t usage_id = ZMK_HID_USAGE_ID(keycode_encoded);
-            
-            if (!usage_page) {
-                usage_page = HID_USAGE_KEY;
+        if (resolved_binding) {
+            bool is_kp = false;
+            if (cfg->auto_mouse_kp_behavior) {
+                const struct device *binding_dev = zmk_behavior_get_binding(resolved_binding->behavior_dev);
+                is_kp = (binding_dev == cfg->auto_mouse_kp_behavior);
+            } else {
+                is_kp = (strcmp(resolved_binding->behavior_dev, "kp") == 0 ||
+                        strcmp(resolved_binding->behavior_dev, "KEY_PRESS") == 0);
             }
             
-            if (is_mod(usage_page, usage_id)) {
-                LOG_DBG("Resolved binding is modifier &kp, not deactivating auto-mouse layer");
-                continue;
+            if (is_kp) {
+                // The param1 contains the keycode for &kp behavior
+                uint32_t keycode_encoded = resolved_binding->param1;
+                uint16_t usage_page = ZMK_HID_USAGE_PAGE(keycode_encoded);
+                uint16_t usage_id = ZMK_HID_USAGE_ID(keycode_encoded);
+                
+                if (!usage_page) {
+                    usage_page = HID_USAGE_KEY;
+                }
+                
+                // Check if it's in the keep-keycodes list if configured
+                bool should_keep = false;
+                if (cfg->auto_mouse_keep_keycodes_len > 0) {
+                    for (size_t j = 0; j < cfg->auto_mouse_keep_keycodes_len; j++) {
+                        if (cfg->auto_mouse_keep_keycodes[j] == usage_id) {
+                            should_keep = true;
+                            break;
+                        }
+                    }
+                } else {
+                    // Fallback to is_mod check if keycodes not configured
+                    should_keep = is_mod(usage_page, usage_id);
+                }
+                
+                if (should_keep) {
+                    LOG_DBG("Resolved binding is keep keycode, not deactivating auto-mouse layer");
+                    continue;
+                }
             }
         }
         

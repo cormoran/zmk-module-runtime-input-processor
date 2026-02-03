@@ -50,3 +50,21 @@ properties:
   track-remainders:
     type: boolean
     description: Track remainders for scaling operations (enabled if present)
+
+  auto-mouse-transparent-behavior:
+    type: phandle
+    description: |
+      Behavior to compare against for transparent detection (typically &trans).
+      Used for efficient auto-mouse layer deactivation logic.
+
+  auto-mouse-kp-behavior:
+    type: phandle
+    description: |
+      Behavior to compare against for key press detection (typically &kp).
+      Used to identify modifier keys for auto-mouse layer deactivation logic.
+
+  auto-mouse-keep-keycodes:
+    type: array
+    description: |
+      List of modifier keycodes that should not deactivate the auto-mouse layer.
+      Typically includes LCTRL, LSHIFT, LALT, LGUI, RCTRL, RSHIFT, RALT, RGUI.
