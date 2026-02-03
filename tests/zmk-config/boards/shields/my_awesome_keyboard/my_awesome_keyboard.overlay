@@ -3,12 +3,12 @@
 *
 * SPDX-License-Identifier: MIT
 */
-#include <dt-bindings/zmk/matrix_transform.h>
 #include "my_awesome_keyboard-layouts.dtsi"
 
 #include <dt-bindings/zmk/pointing.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
-#include "behaviors/runtime-input-processor.dtsi"
+#include <input/processors/runtime-input-processor.dtsi>
+#include <dt-bindings/zmk/matrix_transform.h>// It need to be after runtime-input-processor.dtsi for RC macro
 
 &physical_layout0 {
 	transform = <&transform0>;

@@ -21,7 +21,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
  * Metadata for the custom subsystem.
  */
 static struct zmk_rpc_custom_subsystem_meta rip_feature_meta = {
-    ZMK_RPC_CUSTOM_SUBSYSTEM_UI_URLS("http://localhost:5173"),
+    ZMK_RPC_CUSTOM_SUBSYSTEM_UI_URLS(
+        "https://cormoran.github.io/zmk-module-runtime-input-processor/"),
     .security = ZMK_STUDIO_RPC_HANDLER_UNSECURED,
 };
 
@@ -195,13 +196,15 @@ static int handle_get_input_processor(
 
     strncpy(result.processor.name, name, sizeof(result.processor.name) - 1);
     result.processor.name[sizeof(result.processor.name) - 1] = '\0';
-    result.processor.scale_multiplier = config.scale_multiplier;
-    result.processor.scale_divisor    = config.scale_divisor;
-    result.processor.rotation_degrees = config.rotation_degrees;
+    result.processor.scale_multiplier   = config.scale_multiplier;
+    result.processor.scale_divisor      = config.scale_divisor;
+    result.processor.rotation_degrees   = config.rotation_degrees;
     result.processor.auto_mouse_enabled = config.auto_mouse_enabled;
-    result.processor.auto_mouse_layer = config.auto_mouse_layer;
-    result.processor.auto_mouse_activation_delay_ms = config.auto_mouse_activation_delay_ms;
-    result.processor.auto_mouse_deactivation_delay_ms = config.auto_mouse_deactivation_delay_ms;
+    result.processor.auto_mouse_layer   = config.auto_mouse_layer;
+    result.processor.auto_mouse_activation_delay_ms =
+        config.auto_mouse_activation_delay_ms;
+    result.processor.auto_mouse_deactivation_delay_ms =
+        config.auto_mouse_deactivation_delay_ms;
 
     resp->which_response_type = cormoran_rip_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -238,8 +241,6 @@ static int handle_set_scale_multiplier(
         LOG_ERR("Failed to set scale multiplier: %d", ret);
         return ret;
     }
-
-    // Event will be raised by listener
 
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_scale_multiplier_tag;
@@ -280,8 +281,6 @@ static int handle_set_scale_divisor(
         return ret;
     }
 
-    // Event will be raised by listener
-
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_scale_divisor_tag;
     resp->response_type.set_scale_divisor =
@@ -311,8 +310,6 @@ static int handle_set_rotation(const cormoran_rip_SetRotationRequest *req,
         LOG_ERR("Failed to set rotation: %d", ret);
         return ret;
     }
-
-    // Event will be raised by listener
 
     // Return empty response
     resp->which_response_type        = cormoran_rip_Response_set_rotation_tag;
@@ -344,8 +341,6 @@ static int handle_reset_input_processor(
         return ret;
     }
 
-    // Event will be raised by listener
-
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_reset_input_processor_tag;
     resp->response_type.reset_input_processor =
@@ -360,9 +355,11 @@ static int handle_reset_input_processor(
  */
 static int handle_set_auto_mouse(const cormoran_rip_SetAutoMouseRequest *req,
                                  cormoran_rip_Response *resp) {
-    LOG_DBG("Setting auto-mouse for %s: enabled=%d, layer=%d, act_delay=%d, deact_delay=%d",
-            req->name, req->enabled, req->layer, 
-            req->activation_delay_ms, req->deactivation_delay_ms);
+    LOG_DBG(
+        "Setting auto-mouse for %s: enabled=%d, layer=%d, act_delay=%d, "
+        "deact_delay=%d",
+        req->name, req->enabled, req->layer, req->activation_delay_ms,
+        req->deactivation_delay_ms);
 
     const struct device *dev =
         zmk_input_processor_runtime_find_by_name(req->name);
@@ -372,23 +369,18 @@ static int handle_set_auto_mouse(const cormoran_rip_SetAutoMouseRequest *req,
     }
 
     // Set auto-mouse configuration (persistent)
-    int ret = zmk_input_processor_runtime_set_auto_mouse(dev, req->enabled, 
-                                                         req->layer,
-                                                         req->activation_delay_ms,
-                                                         req->deactivation_delay_ms,
-                                                         true);
+    int ret = zmk_input_processor_runtime_set_auto_mouse(
+        dev, req->enabled, req->layer, req->activation_delay_ms,
+        req->deactivation_delay_ms, true);
     if (ret < 0) {
         LOG_ERR("Failed to set auto-mouse: %d", ret);
         return ret;
     }
 
-    // Event will be raised by listener
-
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_auto_mouse_tag;
-    resp->response_type.set_auto_mouse =
-        (cormoran_rip_SetAutoMouseResponse)
-            cormoran_rip_SetAutoMouseResponse_init_zero;
+    resp->response_type.set_auto_mouse = (cormoran_rip_SetAutoMouseResponse)
+        cormoran_rip_SetAutoMouseResponse_init_zero;
 
     return 0;
 }

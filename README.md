@@ -38,6 +38,8 @@ manifest:
 ### 2. Enable the feature in your `config/<shield>.conf`
 
 ```conf
+CONFIG_ZMK_POINTING=y
+
 # Enable runtime input processor
 CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR=y
 
@@ -50,24 +52,22 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
 
 ```dts
 #include <dt-bindings/zmk/input.h>
+#include <input/processors.dtsi>
+#include <input/processors/runtime-input-processor.dtsi>
+// The .dtsi provides default device definitions
+// - mouse_runtime_input_processor
+// - scroll_runtime_input_processor
 
 / {
-    my_pointer_processor: my_pointer_processor {
-        compatible = "zmk,input-processor-runtime";
-        processor-label = "trackpad";  // Short name (max 8 chars)
-        type = <INPUT_EV_REL>;
-        x-codes = <INPUT_REL_X>;
-        y-codes = <INPUT_REL_Y>;
-        scale-multiplier = <1>;
-        scale-divisor = <1>;
-        rotation-degrees = <0>;
-        track-remainders;
-    };
-
     // Then use it in your input device configuration
     my_input_listener {
         // ... other config ...
-        input-processors = <&my_pointer_processor>;
+        input-processors = <&mouse_runtime_input_processor>;
+
+        scroller {
+			// layers = <9>;
+			input-processors = <&zip_xy_to_scroll_mapper &scroll_runtime_input_processor>;
+		};
     };
 
     // For split keyboard, you can configure input processor in central
@@ -79,12 +79,30 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
         status = <disabled>;
         device = <&split_input>;
     };
+
+    my_rip: my_rip {
+		compatible = "zmk,input-processor-runtime";
+		processor-label = "custom";
+		type = <INPUT_EV_REL>;
+		x-codes = <INPUT_REL_X>;
+		y-codes = <INPUT_REL_Y>;
+		scale-multiplier = <1>;
+		scale-divisor = <1>;
+		rotation-degrees = <0>;
+		track-remainders;
+
+		auto-mouse-transparent-behavior = <&trans>;
+		auto-mouse-kp-behavior = <&kp>;
+		auto-mouse-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+
+		#input-processor-cells = <0>;
+	};
 };
 
 // <central>.overlay
 &split_listener {
     status = "okay";
-    input-processors = <&my_pointer_processor>;
+    input-processors = <&my_rip>;
 };
 ```
 
@@ -126,39 +144,29 @@ scale-divisor = 2
 You can temporarily change input processor settings while holding a key, useful for temporary DPI changes:
 
 ```dts
+#include <behaviors/runtime-input-processor.dtsi>
 / {
-    behaviors {
-        // Behavior to temporarily double the pointer speed
-        temp_fast: temp_fast {
-            compatible = "zmk,behavior-input-processor-temp-config";
-            #binding-cells = <0>;
-            processor-name = "trackpad";  // Must match processor-label
-            scale-multiplier = <2>;
-            scale-divisor = <1>;
-        };
 
-        // Behavior to temporarily halve the pointer speed
-        temp_slow: temp_slow {
-            compatible = "zmk,behavior-input-processor-temp-config";
-            #binding-cells = <0>;
-            processor-name = "trackpad";
-            scale-multiplier = <1>;
-            scale-divisor = <2>;
-        };
-    };
 
     keymap {
         compatible = "zmk,keymap";
         default_layer {
             bindings = <
                 // Use &temp_fast in your keymap
-                &temp_fast  // Hold this key for 2x speed
-                &temp_slow  // Hold this key for 0.5x speed
+                &hdpi  // Hold this key for 1.5x mouse speed
+                &ldpi  // Hold this key for 0.5x mouse speed
+                &hscr  // High scroll speed
+                &lscr  // Low scroll speed
                 // ... other keys
             >;
         };
     };
 };
+// Customization
+&hdpi {
+    scale-multiplier = <3>;
+	scale-divisor = <2>;
+}
 ```
 
 When you press and hold a key with the temporary config behavior:
@@ -174,6 +182,7 @@ The auto-mouse layer feature automatically activates a specified layer when you 
 **Configuration via Web UI:**
 
 Auto-mouse layer settings can be configured through the web interface:
+
 - **Enable/Disable**: Toggle the auto-mouse layer feature
 - **Target Layer**: The layer number to activate (e.g., layer 1, 2, etc.)
 - **Activation Delay**: Time to wait after input starts before activating the layer (milliseconds)
@@ -187,54 +196,20 @@ Auto-mouse layer settings can be configured through the web interface:
 - If you stop moving the pointing device, the layer deactivates after the deactivation delay
 - If a key press occurs before the activation delay expires, the layer won't activate
 
-**Performance Optimization (Optional):**
-
-For better performance, you can configure behavior references and modifier keycodes in the device tree to avoid string comparisons:
-
-```dts
-#include <dt-bindings/zmk/keys.h>
-
-/ {
-    my_pointer_processor: my_pointer_processor {
-        compatible = "zmk,input-processor-runtime";
-        processor-label = "trackpad";
-        type = <INPUT_EV_REL>;
-        x-codes = <INPUT_REL_X>;
-        y-codes = <INPUT_REL_Y>;
-        track-remainders;
-        
-        // Optional: Behavior references for efficient comparison
-        auto-mouse-transparent-behavior = <&trans>;
-        auto-mouse-kp-behavior = <&kp>;
-        
-        // Optional: Modifier keycodes that won't deactivate auto-mouse layer
-        auto-mouse-keep-keycodes = <LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI>;
-    };
-};
-```
-
-These properties are entirely optional - the implementation will fall back to string comparisons and automatic modifier detection if not specified.
-
 **Keep Auto-Mouse Layer Active:**
 
 You can create a behavior to prevent the auto-mouse layer from deactivating while holding a key:
 
 ```dts
-/ {
-    behaviors {
-        // Behavior to keep auto-mouse layer active
-        keep_mouse: keep_mouse {
-            compatible = "zmk,behavior-input-processor-auto-mouse-keep-active";
-            #binding-cells = <0>;
-            processor-name = "trackpad";  // Must match processor-label
-        };
-    };
+#include <behaviors/runtime-input-processor.dtsi>
 
+/ {
     keymap {
         compatible = "zmk,keymap";
         default_layer {
             bindings = <
-                &keep_mouse  // Hold this key to keep auto-mouse layer active
+                // auto-mouse keep active
+                &amka  // Hold this key to keep auto-mouse layer active
                 // ... other keys
             >;
         };

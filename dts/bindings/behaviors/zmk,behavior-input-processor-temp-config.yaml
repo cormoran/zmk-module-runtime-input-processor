@@ -7,7 +7,8 @@ description: |
 
 compatible: "zmk,behavior-input-processor-temp-config"
 
-include: [behavior.yaml]
+include: zero_param.yaml
+
 
 properties:
   processor-name:
@@ -18,14 +19,14 @@ properties:
   scale-multiplier:
     type: int
     description: Temporary scaling multiplier (0 = no change)
+    default: 1
 
   scale-divisor:
     type: int
     description: Temporary scaling divisor (0 = no change)
+    default: 1
 
   rotation-degrees:
     type: int
     description: Temporary rotation angle in degrees (0 = no change)
-
-  "#binding-cells":
-    const: 0
+    default: 0

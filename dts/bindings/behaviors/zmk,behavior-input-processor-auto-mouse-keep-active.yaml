@@ -9,13 +9,11 @@ description: |
 
 compatible: "zmk,behavior-input-processor-auto-mouse-keep-active"
 
-include: [behavior.yaml]
+include: zero_param.yaml
+
 
 properties:
   processor-name:
     type: string
     required: true
     description: Name of the runtime input processor with auto-mouse enabled
-
-  "#binding-cells":
-    const: 0
