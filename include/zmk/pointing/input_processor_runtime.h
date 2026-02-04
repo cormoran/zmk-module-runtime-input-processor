@@ -21,6 +21,8 @@ struct zmk_input_processor_runtime_config {
     uint8_t temp_layer_layer;
     uint16_t temp_layer_activation_delay_ms;
     uint16_t temp_layer_deactivation_delay_ms;
+    // Active layers bitmask (0 = all layers, otherwise each bit represents a layer)
+    uint32_t active_layers;
 };
 
 /**
@@ -172,6 +174,18 @@ int zmk_input_processor_runtime_set_temp_layer_activation_delay(
  */
 int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(
     const struct device *dev, uint32_t deactivation_delay_ms, bool persistent);
+
+/**
+ * @brief Set active layers bitmask
+ *
+ * @param dev Pointer to the device structure
+ * @param layers Bitmask of layers where processor should be active (0 = all layers)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_active_layers(const struct device *dev,
+                                                  uint32_t layers,
+                                                  bool persistent);
 
 /**
  * @brief Notify temp-layer to keep the layer active (called by behavior)

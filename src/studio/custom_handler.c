@@ -64,6 +64,9 @@ static int handle_set_temp_layer_activation_delay(
 static int handle_set_temp_layer_deactivation_delay(
     const cormoran_rip_SetTempLayerDeactivationDelayRequest *req,
     cormoran_rip_Response *resp);
+static int handle_set_active_layers(
+    const cormoran_rip_SetActiveLayersRequest *req,
+    cormoran_rip_Response *resp);
 
 /**
  * Main request handler for the custom RPC subsystem.
@@ -128,6 +131,10 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         case cormoran_rip_Request_set_temp_layer_deactivation_delay_tag:
             rc = handle_set_temp_layer_deactivation_delay(
                 &req.request_type.set_temp_layer_deactivation_delay, resp);
+            break;
+        case cormoran_rip_Request_set_active_layers_tag:
+            rc = handle_set_active_layers(
+                &req.request_type.set_active_layers, resp);
             break;
         default:
             LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -236,6 +243,7 @@ static int handle_get_input_processor(
         config.temp_layer_activation_delay_ms;
     result.processor.temp_layer_deactivation_delay_ms =
         config.temp_layer_deactivation_delay_ms;
+    result.processor.active_layers = config.active_layers;
 
     resp->which_response_type = cormoran_rip_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -509,6 +517,38 @@ static int handle_set_temp_layer_deactivation_delay(
     resp->response_type.set_temp_layer_deactivation_delay =
         (cormoran_rip_SetTempLayerDeactivationDelayResponse)
             cormoran_rip_SetTempLayerDeactivationDelayResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting active layers bitmask
+ */
+static int handle_set_active_layers(
+    const cormoran_rip_SetActiveLayersRequest *req,
+    cormoran_rip_Response *resp) {
+    LOG_DBG("Setting active layers for id=%d to 0x%08x", req->id, req->layers);
+
+    const struct device *dev =
+        zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set active layers (persistent)
+    int ret = zmk_input_processor_runtime_set_active_layers(
+        dev, req->layers, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set active layers: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_active_layers_tag;
+    resp->response_type.set_active_layers =
+        (cormoran_rip_SetActiveLayersResponse)
+            cormoran_rip_SetActiveLayersResponse_init_zero;
 
     return 0;
 }

@@ -15,6 +15,8 @@ message InputProcessorInfo {
     uint32 temp_layer_layer = 7;  // Target layer ID for temp-layer
     uint32 temp_layer_activation_delay_ms = 8;  // Delay before activating (ms)
     uint32 temp_layer_deactivation_delay_ms = 9;  // Delay before deactivating (ms)
+    // Active layers bitmask (0 = all layers)
+    uint32 active_layers = 10;  // Bitmask of layers where processor is active
 }
 
 message ListInputProcessorsRequest {
@@ -72,6 +74,11 @@ message SetTempLayerDeactivationDelayRequest {
     uint32 deactivation_delay_ms = 2;  // Delay before deactivating (ms)
 }
 
+message SetActiveLayersRequest {
+    uint32 id     = 1;  // ID of the input processor to update
+    uint32 layers = 2;  // Bitmask of layers where processor is active (0 = all)
+}
+
 message SetScaleMultiplierResponse {
     // Empty - use notification to report changes
 }
@@ -104,6 +111,10 @@ message SetTempLayerDeactivationDelayResponse {
     // Empty - use notification to report changes
 }
 
+message SetActiveLayersResponse {
+    // Empty - use notification to report changes
+}
+
 message Request {
     oneof request_type {
         ListInputProcessorsRequest list_input_processors = 1;
@@ -116,6 +127,7 @@ message Request {
         SetTempLayerLayerRequest set_temp_layer_layer = 8;
         SetTempLayerActivationDelayRequest set_temp_layer_activation_delay = 9;
         SetTempLayerDeactivationDelayRequest set_temp_layer_deactivation_delay = 10;
+        SetActiveLayersRequest set_active_layers = 11;
     }
 }
 
@@ -136,6 +148,7 @@ message Response {
         SetTempLayerLayerResponse set_temp_layer_layer = 9;
         SetTempLayerActivationDelayResponse set_temp_layer_activation_delay = 10;
         SetTempLayerDeactivationDelayResponse set_temp_layer_deactivation_delay = 11;
+        SetActiveLayersResponse set_active_layers = 12;
     }
 }
 

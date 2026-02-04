@@ -87,3 +87,11 @@ properties:
     type: int
     default: 500
     description: Default delay before deactivating temp-layer layer after input stops (milliseconds)
+
+  active-layers:
+    type: int
+    default: 0
+    description: |
+      Bitmask of layers where processor should be active (0 = all layers).
+      Each bit represents a layer: bit 0 = layer 0, bit 1 = layer 1, etc.
+      If at least one specified layer is active, the processor works.

@@ -48,6 +48,8 @@ struct runtime_processor_config {
     uint8_t initial_temp_layer_layer;
     uint16_t initial_temp_layer_activation_delay_ms;
     uint16_t initial_temp_layer_deactivation_delay_ms;
+    // Active layers bitmask from DT
+    uint32_t initial_active_layers;
 };
 
 struct runtime_processor_data {
@@ -86,6 +88,10 @@ struct runtime_processor_data {
     uint8_t persistent_temp_layer_layer;
     uint16_t persistent_temp_layer_activation_delay_ms;
     uint16_t persistent_temp_layer_deactivation_delay_ms;
+
+    // Active layers bitmask (0 = all layers)
+    uint32_t active_layers;
+    uint32_t persistent_active_layers;
 
     // Temp-layer runtime state
     struct k_work_delayable temp_layer_activation_work;
@@ -162,6 +168,33 @@ static int code_idx(uint16_t code, const uint16_t *list, size_t len) {
     return -ENODEV;
 }
 
+static bool is_processor_active_for_current_layers(uint32_t active_layers_mask) {
+    // If mask is 0, processor is active for all layers
+    if (active_layers_mask == 0) {
+        return true;
+    }
+
+    // Check if at least one of the active layers matches the mask
+    for (int layer_idx = ZMK_KEYMAP_LAYERS_LEN - 1; layer_idx >= 0; layer_idx--) {
+        zmk_keymap_layer_id_t layer_id = zmk_keymap_layer_index_to_id(layer_idx);
+        
+        if (layer_id == ZMK_KEYMAP_LAYER_ID_INVAL) {
+            continue;
+        }
+        
+        if (!zmk_keymap_layer_active(layer_id)) {
+            continue;
+        }
+        
+        // Check if this layer's bit is set in the mask
+        if (active_layers_mask & (1 << layer_idx)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 static int scale_val(struct input_event *event, uint32_t mul, uint32_t div,
                      struct zmk_input_processor_state *state) {
     if (mul == 0 || div == 0) {
@@ -200,6 +233,11 @@ static int runtime_processor_handle_event(
     int y_idx = code_idx(event->code, cfg->y_codes, cfg->y_codes_len);
 
     if (x_idx < 0 && y_idx < 0) {
+        return ZMK_INPUT_PROC_CONTINUE;
+    }
+
+    // Check if processor should be active for current layers
+    if (!is_processor_active_for_current_layers(data->active_layers)) {
         return ZMK_INPUT_PROC_CONTINUE;
     }
 
@@ -289,6 +327,7 @@ struct processor_settings {
     uint8_t temp_layer_layer;
     uint16_t temp_layer_activation_delay_ms;
     uint16_t temp_layer_deactivation_delay_ms;
+    uint32_t active_layers;
 };
 
 static void save_processor_settings_work_handler(struct k_work *work) {
@@ -308,6 +347,7 @@ static void save_processor_settings_work_handler(struct k_work *work) {
             data->persistent_temp_layer_activation_delay_ms,
         .temp_layer_deactivation_delay_ms =
             data->persistent_temp_layer_deactivation_delay_ms,
+        .active_layers = data->persistent_active_layers,
     };
 
     char path[64];
@@ -347,6 +387,7 @@ static int load_processor_settings_cb(const char *name, size_t len,
                 settings.temp_layer_activation_delay_ms;
             data->persistent_temp_layer_deactivation_delay_ms =
                 settings.temp_layer_deactivation_delay_ms;
+            data->persistent_active_layers = settings.active_layers;
 
             // Apply to current values
             data->scale_multiplier   = settings.scale_multiplier;
@@ -358,13 +399,15 @@ static int load_processor_settings_cb(const char *name, size_t len,
                 settings.temp_layer_activation_delay_ms;
             data->temp_layer_deactivation_delay_ms =
                 settings.temp_layer_deactivation_delay_ms;
+            data->active_layers = settings.active_layers;
             update_rotation_values(data);
 
             LOG_INF(
                 "Loaded settings for %s: scale=%d/%d, rotation=%d, "
-                "temp_layer=%d",
+                "temp_layer=%d, active_layers=0x%08x",
                 cfg->name, settings.scale_multiplier, settings.scale_divisor,
-                settings.rotation_degrees, settings.temp_layer_enabled);
+                settings.rotation_degrees, settings.temp_layer_enabled,
+                settings.active_layers);
             return 0;
         }
     }
@@ -549,6 +592,10 @@ int zmk_input_processor_runtime_reset(const struct device *dev) {
     data->persistent_temp_layer_deactivation_delay_ms =
         cfg->initial_temp_layer_deactivation_delay_ms;
 
+    // Reset active layers to defaults
+    data->active_layers = cfg->initial_active_layers;
+    data->persistent_active_layers = cfg->initial_active_layers;
+
     // Deactivate temp-layer layer if active
     if (data->temp_layer_layer_active) {
         zmk_keymap_layer_deactivate(data->temp_layer_layer);
@@ -608,6 +655,7 @@ int zmk_input_processor_runtime_get_config(
             data->persistent_temp_layer_activation_delay_ms;
         config->temp_layer_deactivation_delay_ms =
             data->persistent_temp_layer_deactivation_delay_ms;
+        config->active_layers = data->persistent_active_layers;
     }
 
     return 0;
@@ -662,6 +710,7 @@ int zmk_input_processor_runtime_get_config(
             DT_INST_PROP_OR(n, temp_layer_activation_delay_ms, 100),                                   \
         .initial_temp_layer_deactivation_delay_ms =                                                    \
             DT_INST_PROP_OR(n, temp_layer_deactivation_delay_ms, 500),                                 \
+        .initial_active_layers = DT_INST_PROP_OR(n, active_layers, 0),                                 \
     };                                                                                                 \
     static struct runtime_processor_data runtime_data_##n;                                             \
     DEVICE_DT_INST_DEFINE(n, &runtime_processor_init, NULL, &runtime_data_##n,                         \
@@ -1079,6 +1128,34 @@ int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(
     }
 
     LOG_INF("Temp-layer deactivation delay: %dms%s", deactivation_delay_ms,
+            persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_active_layers(const struct device *dev,
+                                                  uint32_t layers,
+                                                  bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->active_layers = layers;
+
+    if (persistent) {
+        data->persistent_active_layers = layers;
+    }
+
+    LOG_INF("Active layers: 0x%08x%s", layers,
             persistent ? " (persistent)" : " (temporary)");
 
     int ret = 0;
