@@ -79,7 +79,7 @@ function App() {
 export function InputProcessorManager() {
   const zmkApp = useContext(ZMKAppContext);
   const [processors, setProcessors] = useState<InputProcessorInfo[]>([]);
-  const [selectedProcessor, setSelectedProcessor] = useState<string | null>(
+  const [selectedProcessorId, setSelectedProcessorId] = useState<number | null>(
     null
   );
   const [isLoading, setIsLoading] = useState(false);
@@ -153,7 +153,7 @@ export function InputProcessorManager() {
   }, [callRPC]);
 
   const updateProcessor = useCallback(async () => {
-    if (!selectedProcessor) return;
+    if (selectedProcessorId === null) return;
 
     setIsLoading(true);
     setError(null);
@@ -163,7 +163,7 @@ export function InputProcessorManager() {
       // Set scale multiplier
       const mulRequest = Request.create({
         setScaleMultiplier: {
-          name: selectedProcessor,
+          id: selectedProcessorId,
           value: scaleMultiplier,
         },
       });
@@ -177,7 +177,7 @@ export function InputProcessorManager() {
       // Set scale divisor
       const divRequest = Request.create({
         setScaleDivisor: {
-          name: selectedProcessor,
+          id: selectedProcessorId,
           value: scaleDivisor,
         },
       });
@@ -191,7 +191,7 @@ export function InputProcessorManager() {
       // Set rotation
       const rotRequest = Request.create({
         setRotation: {
-          name: selectedProcessor,
+          id: selectedProcessorId,
           value: rotationDegrees,
         },
       });
@@ -202,19 +202,58 @@ export function InputProcessorManager() {
         return;
       }
 
-      // Set temp-layer configuration
-      const tempLayerRequest = Request.create({
-        setTempLayer: {
-          name: selectedProcessor,
+      // Set temp-layer enabled
+      const enabledRequest = Request.create({
+        setTempLayerEnabled: {
+          id: selectedProcessorId,
           enabled: tempLayerEnabled,
+        },
+      });
+      const enabledResp = await callRPC(enabledRequest);
+      if (enabledResp?.error) {
+        setError(enabledResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Set temp-layer layer
+      const layerRequest = Request.create({
+        setTempLayerLayer: {
+          id: selectedProcessorId,
           layer: tempLayerLayer,
+        },
+      });
+      const layerResp = await callRPC(layerRequest);
+      if (layerResp?.error) {
+        setError(layerResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Set temp-layer activation delay
+      const actDelayRequest = Request.create({
+        setTempLayerActivationDelay: {
+          id: selectedProcessorId,
           activationDelayMs: tempLayerActivationDelay,
+        },
+      });
+      const actDelayResp = await callRPC(actDelayRequest);
+      if (actDelayResp?.error) {
+        setError(actDelayResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Set temp-layer deactivation delay
+      const deactDelayRequest = Request.create({
+        setTempLayerDeactivationDelay: {
+          id: selectedProcessorId,
           deactivationDelayMs: tempLayerDeactivationDelay,
         },
       });
-      const tempLayerResp = await callRPC(tempLayerRequest);
-      if (tempLayerResp?.error) {
-        setError(tempLayerResp.error.message);
+      const deactDelayResp = await callRPC(deactDelayRequest);
+      if (deactDelayResp?.error) {
+        setError(deactDelayResp.error.message);
         setIsLoading(false);
         return;
       }
@@ -229,7 +268,7 @@ export function InputProcessorManager() {
     }
   }, [
     callRPC,
-    selectedProcessor,
+    selectedProcessorId,
     scaleMultiplier,
     scaleDivisor,
     rotationDegrees,
@@ -240,10 +279,10 @@ export function InputProcessorManager() {
   ]);
 
   const selectProcessor = useCallback(
-    (name: string) => {
-      const proc = processors.find((p) => p.name === name);
+    (id: number) => {
+      const proc = processors.find((p) => p.id === id);
       if (proc) {
-        setSelectedProcessor(name);
+        setSelectedProcessorId(id);
         setScaleMultiplier(proc.scaleMultiplier);
         setScaleDivisor(proc.scaleDivisor);
         setRotationDegrees(proc.rotationDegrees);
@@ -279,7 +318,7 @@ export function InputProcessorManager() {
 
             // Update or add processor to the list
             setProcessors((prev) => {
-              const existingIndex = prev.findIndex((p) => p.name === proc.name);
+              const existingIndex = prev.findIndex((p) => p.id === proc.id);
               if (existingIndex >= 0) {
                 // Update existing processor
                 const updated = [...prev];
@@ -292,7 +331,7 @@ export function InputProcessorManager() {
             });
 
             // If this is the currently selected processor, update form values
-            if (selectedProcessor === proc.name) {
+            if (selectedProcessorId === proc.id) {
               setScaleMultiplier(proc.scaleMultiplier);
               setScaleDivisor(proc.scaleDivisor);
               setRotationDegrees(proc.rotationDegrees);
@@ -303,8 +342,8 @@ export function InputProcessorManager() {
             }
 
             // If no processor is selected yet, select the first one
-            if (!selectedProcessor) {
-              setSelectedProcessor(proc.name);
+            if (selectedProcessorId === null) {
+              setSelectedProcessorId(proc.id);
               setScaleMultiplier(proc.scaleMultiplier);
               setScaleDivisor(proc.scaleDivisor);
               setRotationDegrees(proc.rotationDegrees);
@@ -321,7 +360,7 @@ export function InputProcessorManager() {
     });
 
     return unsubscribe;
-  }, [zmkApp, subsystem, selectedProcessor]);
+  }, [zmkApp, subsystem, selectedProcessorId]);
 
   if (!zmkApp) return null;
 
@@ -366,9 +405,9 @@ export function InputProcessorManager() {
           <div className="processor-list">
             {processors.map((proc) => (
               <div
-                key={proc.name}
-                className={`processor-item ${selectedProcessor === proc.name ? "selected" : ""}`}
-                onClick={() => selectProcessor(proc.name)}
+                key={proc.id}
+                className={`processor-item ${selectedProcessorId === proc.id ? "selected" : ""}`}
+                onClick={() => selectProcessor(proc.id)}
                 style={{
                   padding: "0.75rem",
                   margin: "0.5rem 0",
@@ -376,7 +415,7 @@ export function InputProcessorManager() {
                   borderRadius: "4px",
                   cursor: "pointer",
                   backgroundColor:
-                    selectedProcessor === proc.name ? "#e3f2fd" : "transparent",
+                    selectedProcessorId === proc.id ? "#e3f2fd" : "transparent",
                 }}
               >
                 <strong>{proc.name}</strong>
@@ -398,9 +437,12 @@ export function InputProcessorManager() {
         )}
       </section>
 
-      {selectedProcessor && (
+      {selectedProcessorId !== null && (
         <section className="card">
-          <h2>Configure: {selectedProcessor}</h2>
+          <h2>
+            Configure:{" "}
+            {processors.find((p) => p.id === selectedProcessorId)?.name}
+          </h2>
 
           <div className="input-group">
             <label htmlFor="scale-multiplier">Scaling Multiplier:</label>

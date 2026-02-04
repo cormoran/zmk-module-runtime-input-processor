@@ -84,6 +84,22 @@ int zmk_input_processor_runtime_get_config(const struct device *dev,
 const struct device *zmk_input_processor_runtime_find_by_name(const char *name);
 
 /**
+ * @brief Find a runtime input processor by ID
+ *
+ * @param id ID of the processor to find
+ * @return Pointer to the device structure, or NULL if not found
+ */
+const struct device *zmk_input_processor_runtime_find_by_id(uint8_t id);
+
+/**
+ * @brief Get the ID of a runtime input processor
+ *
+ * @param dev Pointer to the device structure
+ * @return ID of the processor, or -1 if not found
+ */
+int zmk_input_processor_runtime_get_id(const struct device *dev);
+
+/**
  * @brief Iterate over all runtime input processors
  *
  * @param callback Callback function to call for each processor
@@ -110,6 +126,52 @@ int zmk_input_processor_runtime_set_temp_layer(const struct device *dev,
                                                uint32_t activation_delay_ms,
                                                uint32_t deactivation_delay_ms,
                                                bool persistent);
+
+/**
+ * @brief Set temp-layer enabled state
+ *
+ * @param dev Pointer to the device structure
+ * @param enabled Whether temp-layer is enabled
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_temp_layer_enabled(const struct device *dev,
+                                                       bool enabled,
+                                                       bool persistent);
+
+/**
+ * @brief Set temp-layer target layer
+ *
+ * @param dev Pointer to the device structure
+ * @param layer Target layer ID for temp-layer
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_temp_layer_layer(const struct device *dev,
+                                                     uint8_t layer,
+                                                     bool persistent);
+
+/**
+ * @brief Set temp-layer activation delay
+ *
+ * @param dev Pointer to the device structure
+ * @param activation_delay_ms Delay before activating layer after input starts (ms)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_temp_layer_activation_delay(
+    const struct device *dev, uint32_t activation_delay_ms, bool persistent);
+
+/**
+ * @brief Set temp-layer deactivation delay
+ *
+ * @param dev Pointer to the device structure
+ * @param deactivation_delay_ms Delay before deactivating layer after input stops (ms)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(
+    const struct device *dev, uint32_t deactivation_delay_ms, bool persistent);
 
 /**
  * @brief Notify temp-layer to keep the layer active (called by behavior)
