@@ -712,6 +712,22 @@ const struct device *zmk_input_processor_runtime_find_by_name(
     return NULL;
 }
 
+const struct device *zmk_input_processor_runtime_find_by_id(uint8_t id) {
+    if (id < runtime_processors_count) {
+        return runtime_processors[id];
+    }
+    return NULL;
+}
+
+int zmk_input_processor_runtime_get_id(const struct device *dev) {
+    for (size_t i = 0; i < runtime_processors_count; i++) {
+        if (runtime_processors[i] == dev) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 #if IS_ENABLED(CONFIG_SETTINGS)
 
 static int runtime_processor_settings_load_cb(const char *name, size_t len,
@@ -959,6 +975,116 @@ int zmk_input_processor_runtime_set_temp_layer(const struct device *dev,
     if (persistent) {
         ret = schedule_save_processor_settings(dev);
         // Raise event for persistent changes
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_temp_layer_enabled(const struct device *dev,
+                                                       bool enabled,
+                                                       bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->temp_layer_enabled = enabled;
+
+    if (persistent) {
+        data->persistent_temp_layer_enabled = enabled;
+    }
+
+    LOG_INF("Temp-layer enabled: %d%s", enabled,
+            persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_temp_layer_layer(const struct device *dev,
+                                                     uint8_t layer,
+                                                     bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->temp_layer_layer = layer;
+
+    if (persistent) {
+        data->persistent_temp_layer_layer = layer;
+    }
+
+    LOG_INF("Temp-layer layer: %d%s", layer,
+            persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_temp_layer_activation_delay(
+    const struct device *dev, uint32_t activation_delay_ms, bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->temp_layer_activation_delay_ms = activation_delay_ms;
+
+    if (persistent) {
+        data->persistent_temp_layer_activation_delay_ms = activation_delay_ms;
+    }
+
+    LOG_INF("Temp-layer activation delay: %dms%s", activation_delay_ms,
+            persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(
+    const struct device *dev, uint32_t deactivation_delay_ms, bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->temp_layer_deactivation_delay_ms = deactivation_delay_ms;
+
+    if (persistent) {
+        data->persistent_temp_layer_deactivation_delay_ms = deactivation_delay_ms;
+    }
+
+    LOG_INF("Temp-layer deactivation delay: %dms%s", deactivation_delay_ms,
+            persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
         raise_state_changed_event(dev);
     }
 #endif

@@ -62,7 +62,7 @@ static int input_processor_state_changed_listener(const zmk_event_t *eh) {
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    LOG_DBG("Input processor state changed: %s", ev->name);
+    LOG_DBG("Input processor state changed: %s (id=%d)", ev->name, ev->id);
 
     cormoran_rip_Notification notification =
         cormoran_rip_Notification_init_zero;
@@ -72,6 +72,7 @@ static int input_processor_state_changed_listener(const zmk_event_t *eh) {
     cormoran_rip_InputProcessorInfo *info =
         &notification.notification_type.input_processor_changed.processor;
 
+    info->id = ev->id;
     strncpy(info->name, ev->name, sizeof(info->name) - 1);
     info->name[sizeof(info->name) - 1] = '\0';
     info->scale_multiplier             = ev->config.scale_multiplier;

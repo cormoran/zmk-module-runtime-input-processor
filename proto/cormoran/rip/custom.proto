@@ -4,16 +4,17 @@ package cormoran.rip;
 
 // Runtime Input Processor Messages
 message InputProcessorInfo {
-    string name             = 1;  // Short name (max 8 chars for BLE)
-    uint32 scale_multiplier = 2;  // Scaling multiplier
+    uint32 id               = 1;  // Processor ID (index in array)
+    string name             = 2;  // Short name (max 8 chars for BLE)
+    uint32 scale_multiplier = 3;  // Scaling multiplier
     uint32 scale_divisor =
-        3;  // Scaling divisor (multiply by scale_multiplier/scale_divisor)
-    int32 rotation_degrees = 4;  // Rotation angle in degrees
+        4;  // Scaling divisor (multiply by scale_multiplier/scale_divisor)
+    int32 rotation_degrees = 5;  // Rotation angle in degrees
     // Auto-mouse layer settings
-    bool temp_layer_enabled = 5;  // Whether temp-layer is enabled
-    uint32 temp_layer_layer = 6;  // Target layer ID for temp-layer
-    uint32 temp_layer_activation_delay_ms = 7;  // Delay before activating (ms)
-    uint32 temp_layer_deactivation_delay_ms = 8;  // Delay before deactivating (ms)
+    bool temp_layer_enabled = 6;  // Whether temp-layer is enabled
+    uint32 temp_layer_layer = 7;  // Target layer ID for temp-layer
+    uint32 temp_layer_activation_delay_ms = 8;  // Delay before activating (ms)
+    uint32 temp_layer_deactivation_delay_ms = 9;  // Delay before deactivating (ms)
 }
 
 message ListInputProcessorsRequest {
@@ -25,7 +26,7 @@ message ListInputProcessorsResponse {
 }
 
 message GetInputProcessorRequest {
-    string name = 1;  // Name of the input processor
+    uint32 id = 1;  // ID of the input processor
 }
 
 message GetInputProcessorResponse {
@@ -33,30 +34,42 @@ message GetInputProcessorResponse {
 }
 
 message SetScaleMultiplierRequest {
-    string name  = 1;  // Name of the input processor to update
+    uint32 id    = 1;  // ID of the input processor to update
     uint32 value = 2;  // New scaling multiplier
 }
 
 message SetScaleDivisorRequest {
-    string name  = 1;  // Name of the input processor to update
+    uint32 id    = 1;  // ID of the input processor to update
     uint32 value = 2;  // New scaling divisor
 }
 
 message SetRotationRequest {
-    string name = 1;  // Name of the input processor to update
+    uint32 id   = 1;  // ID of the input processor to update
     int32 value = 2;  // New rotation angle in degrees
 }
 
 message ResetInputProcessorRequest {
-    string name = 1;  // Name of the input processor to reset
+    uint32 id = 1;  // ID of the input processor to reset
 }
 
-message SetTempLayerRequest {
-    string name = 1;  // Name of the input processor to update
+message SetTempLayerEnabledRequest {
+    uint32 id    = 1;  // ID of the input processor to update
     bool enabled = 2;  // Whether temp-layer is enabled
-    uint32 layer = 3;  // Target layer ID for temp-layer
-    uint32 activation_delay_ms = 4;  // Delay before activating (ms)
-    uint32 deactivation_delay_ms = 5;  // Delay before deactivating (ms)
+}
+
+message SetTempLayerLayerRequest {
+    uint32 id    = 1;  // ID of the input processor to update
+    uint32 layer = 2;  // Target layer ID for temp-layer
+}
+
+message SetTempLayerActivationDelayRequest {
+    uint32 id                  = 1;  // ID of the input processor to update
+    uint32 activation_delay_ms = 2;  // Delay before activating (ms)
+}
+
+message SetTempLayerDeactivationDelayRequest {
+    uint32 id                    = 1;  // ID of the input processor to update
+    uint32 deactivation_delay_ms = 2;  // Delay before deactivating (ms)
 }
 
 message SetScaleMultiplierResponse {
@@ -75,7 +88,19 @@ message ResetInputProcessorResponse {
     // Empty - use notification to report changes
 }
 
-message SetTempLayerResponse {
+message SetTempLayerEnabledResponse {
+    // Empty - use notification to report changes
+}
+
+message SetTempLayerLayerResponse {
+    // Empty - use notification to report changes
+}
+
+message SetTempLayerActivationDelayResponse {
+    // Empty - use notification to report changes
+}
+
+message SetTempLayerDeactivationDelayResponse {
     // Empty - use notification to report changes
 }
 
@@ -87,7 +112,10 @@ message Request {
         SetScaleDivisorRequest set_scale_divisor         = 4;
         SetRotationRequest set_rotation                  = 5;
         ResetInputProcessorRequest reset_input_processor = 6;
-        SetTempLayerRequest set_temp_layer               = 7;
+        SetTempLayerEnabledRequest set_temp_layer_enabled = 7;
+        SetTempLayerLayerRequest set_temp_layer_layer = 8;
+        SetTempLayerActivationDelayRequest set_temp_layer_activation_delay = 9;
+        SetTempLayerDeactivationDelayRequest set_temp_layer_deactivation_delay = 10;
     }
 }
 
@@ -104,7 +132,10 @@ message Response {
         SetScaleDivisorResponse set_scale_divisor         = 5;
         SetRotationResponse set_rotation                  = 6;
         ResetInputProcessorResponse reset_input_processor = 7;
-        SetTempLayerResponse set_temp_layer               = 8;
+        SetTempLayerEnabledResponse set_temp_layer_enabled = 8;
+        SetTempLayerLayerResponse set_temp_layer_layer = 9;
+        SetTempLayerActivationDelayResponse set_temp_layer_activation_delay = 10;
+        SetTempLayerDeactivationDelayResponse set_temp_layer_deactivation_delay = 11;
     }
 }
 
