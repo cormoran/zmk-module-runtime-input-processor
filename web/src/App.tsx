@@ -21,6 +21,9 @@ import {
 // Custom subsystem identifier - must match firmware registration
 export const SUBSYSTEM_IDENTIFIER = "cormoran_rip";
 
+// Maximum number of layers supported (matches ZMK's 32-bit layer state)
+const MAX_LAYERS = 32;
+
 function App() {
   return (
     <div className="app">
@@ -669,7 +672,7 @@ export function InputProcessorManager() {
                 marginTop: "0.5rem",
               }}
             >
-              {Array.from({ length: 32 }, (_, i) => i).map((layer) => (
+              {Array.from({ length: MAX_LAYERS }, (_, i) => i).map((layer) => (
                 <label
                   key={layer}
                   style={{

@@ -174,22 +174,23 @@ static bool is_processor_active_for_current_layers(uint32_t active_layers_mask) 
         return true;
     }
 
-    // Check if at least one of the active layers matches the mask
-    for (int layer_idx = ZMK_KEYMAP_LAYERS_LEN - 1; layer_idx >= 0; layer_idx--) {
-        zmk_keymap_layer_id_t layer_id = zmk_keymap_layer_index_to_id(layer_idx);
-        
-        if (layer_id == ZMK_KEYMAP_LAYER_ID_INVAL) {
-            continue;
+    // Check only the layers that are set in the bitmask
+    // This is more efficient than checking all layers
+    uint32_t remaining_mask = active_layers_mask;
+    int layer_idx = 0;
+    
+    while (remaining_mask != 0 && layer_idx < ZMK_KEYMAP_LAYERS_LEN) {
+        // Check if this bit is set
+        if (remaining_mask & 1) {
+            zmk_keymap_layer_id_t layer_id = zmk_keymap_layer_index_to_id(layer_idx);
+            
+            if (layer_id != ZMK_KEYMAP_LAYER_ID_INVAL && zmk_keymap_layer_active(layer_id)) {
+                return true;
+            }
         }
         
-        if (!zmk_keymap_layer_active(layer_id)) {
-            continue;
-        }
-        
-        // Check if this layer's bit is set in the mask
-        if (active_layers_mask & (1 << layer_idx)) {
-            return true;
-        }
+        remaining_mask >>= 1;
+        layer_idx++;
     }
     
     return false;
@@ -402,9 +403,7 @@ static int load_processor_settings_cb(const char *name, size_t len,
             data->active_layers = settings.active_layers;
             update_rotation_values(data);
 
-            LOG_INF(
-                "Loaded settings for %s: scale=%d/%d, rotation=%d, "
-                "temp_layer=%d, active_layers=0x%08x",
+            LOG_INF("Loaded settings for %s: scale=%d/%d, rotation=%d, temp_layer=%d, active_layers=0x%08x",
                 cfg->name, settings.scale_multiplier, settings.scale_divisor,
                 settings.rotation_degrees, settings.temp_layer_enabled,
                 settings.active_layers);
