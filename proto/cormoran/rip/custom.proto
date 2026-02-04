@@ -10,10 +10,10 @@ message InputProcessorInfo {
         3;  // Scaling divisor (multiply by scale_multiplier/scale_divisor)
     int32 rotation_degrees = 4;  // Rotation angle in degrees
     // Auto-mouse layer settings
-    bool auto_mouse_enabled = 5;  // Whether auto-mouse is enabled
-    uint32 auto_mouse_layer = 6;  // Target layer ID for auto-mouse
-    uint32 auto_mouse_activation_delay_ms = 7;  // Delay before activating (ms)
-    uint32 auto_mouse_deactivation_delay_ms = 8;  // Delay before deactivating (ms)
+    bool temp_layer_enabled = 5;  // Whether temp-layer is enabled
+    uint32 temp_layer_layer = 6;  // Target layer ID for temp-layer
+    uint32 temp_layer_activation_delay_ms = 7;  // Delay before activating (ms)
+    uint32 temp_layer_deactivation_delay_ms = 8;  // Delay before deactivating (ms)
 }
 
 message ListInputProcessorsRequest {
@@ -51,10 +51,10 @@ message ResetInputProcessorRequest {
     string name = 1;  // Name of the input processor to reset
 }
 
-message SetAutoMouseRequest {
+message SetTempLayerRequest {
     string name = 1;  // Name of the input processor to update
-    bool enabled = 2;  // Whether auto-mouse is enabled
-    uint32 layer = 3;  // Target layer ID for auto-mouse
+    bool enabled = 2;  // Whether temp-layer is enabled
+    uint32 layer = 3;  // Target layer ID for temp-layer
     uint32 activation_delay_ms = 4;  // Delay before activating (ms)
     uint32 deactivation_delay_ms = 5;  // Delay before deactivating (ms)
 }
@@ -75,7 +75,7 @@ message ResetInputProcessorResponse {
     // Empty - use notification to report changes
 }
 
-message SetAutoMouseResponse {
+message SetTempLayerResponse {
     // Empty - use notification to report changes
 }
 
@@ -87,7 +87,7 @@ message Request {
         SetScaleDivisorRequest set_scale_divisor         = 4;
         SetRotationRequest set_rotation                  = 5;
         ResetInputProcessorRequest reset_input_processor = 6;
-        SetAutoMouseRequest set_auto_mouse               = 7;
+        SetTempLayerRequest set_temp_layer               = 7;
     }
 }
 
@@ -104,7 +104,7 @@ message Response {
         SetScaleDivisorResponse set_scale_divisor         = 5;
         SetRotationResponse set_rotation                  = 6;
         ResetInputProcessorResponse reset_input_processor = 7;
-        SetAutoMouseResponse set_auto_mouse               = 8;
+        SetTempLayerResponse set_temp_layer               = 8;
     }
 }
 

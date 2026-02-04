@@ -72,7 +72,7 @@
 		/omit-if-no-ref/
 		#endif
 		rip_amka: amka {
-			compatible = "zmk,behavior-input-processor-auto-mouse-keep-active";
+			compatible = "zmk,behavior-input-processor-temp-layer-keep-active";
 			processor-name = "mouse";
 			#binding-cells = <0>;
 		};

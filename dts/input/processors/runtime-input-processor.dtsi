@@ -22,9 +22,9 @@
 		rotation-degrees = <0>;
 		track-remainders;
 		
-		auto-mouse-transparent-behavior = <&trans>;
-		auto-mouse-kp-behavior = <&kp>;
-		auto-mouse-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+		temp-layer-transparent-behavior = <&trans>;
+		temp-layer-kp-behavior = <&kp>;
+		temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
 		
 		#input-processor-cells = <0>;
 	};
@@ -42,9 +42,9 @@
 		rotation-degrees = <0>;
 		track-remainders;
 		
-		auto-mouse-transparent-behavior = <&trans>;
-		auto-mouse-kp-behavior = <&kp>;
-		auto-mouse-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+		temp-layer-transparent-behavior = <&trans>;
+		temp-layer-kp-behavior = <&kp>;
+		temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
 		
 		#input-processor-cells = <0>;
 	};

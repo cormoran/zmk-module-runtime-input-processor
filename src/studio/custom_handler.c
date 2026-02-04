@@ -52,7 +52,7 @@ static int handle_set_rotation(const cormoran_rip_SetRotationRequest *req,
 static int handle_reset_input_processor(
     const cormoran_rip_ResetInputProcessorRequest *req,
     cormoran_rip_Response *resp);
-static int handle_set_auto_mouse(const cormoran_rip_SetAutoMouseRequest *req,
+static int handle_set_temp_layer(const cormoran_rip_SetTempLayerRequest *req,
                                  cormoran_rip_Response *resp);
 
 /**
@@ -103,8 +103,8 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
             rc = handle_reset_input_processor(
                 &req.request_type.reset_input_processor, resp);
             break;
-        case cormoran_rip_Request_set_auto_mouse_tag:
-            rc = handle_set_auto_mouse(&req.request_type.set_auto_mouse, resp);
+        case cormoran_rip_Request_set_temp_layer_tag:
+            rc = handle_set_temp_layer(&req.request_type.set_temp_layer, resp);
             break;
         default:
             LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -199,12 +199,12 @@ static int handle_get_input_processor(
     result.processor.scale_multiplier   = config.scale_multiplier;
     result.processor.scale_divisor      = config.scale_divisor;
     result.processor.rotation_degrees   = config.rotation_degrees;
-    result.processor.auto_mouse_enabled = config.auto_mouse_enabled;
-    result.processor.auto_mouse_layer   = config.auto_mouse_layer;
-    result.processor.auto_mouse_activation_delay_ms =
-        config.auto_mouse_activation_delay_ms;
-    result.processor.auto_mouse_deactivation_delay_ms =
-        config.auto_mouse_deactivation_delay_ms;
+    result.processor.temp_layer_enabled = config.temp_layer_enabled;
+    result.processor.temp_layer_layer   = config.temp_layer_layer;
+    result.processor.temp_layer_activation_delay_ms =
+        config.temp_layer_activation_delay_ms;
+    result.processor.temp_layer_deactivation_delay_ms =
+        config.temp_layer_deactivation_delay_ms;
 
     resp->which_response_type = cormoran_rip_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -351,12 +351,12 @@ static int handle_reset_input_processor(
 }
 
 /**
- * Handle setting auto-mouse layer configuration
+ * Handle setting temp-layer layer configuration
  */
-static int handle_set_auto_mouse(const cormoran_rip_SetAutoMouseRequest *req,
+static int handle_set_temp_layer(const cormoran_rip_SetTempLayerRequest *req,
                                  cormoran_rip_Response *resp) {
     LOG_DBG(
-        "Setting auto-mouse for %s: enabled=%d, layer=%d, act_delay=%d, "
+        "Setting temp-layer for %s: enabled=%d, layer=%d, act_delay=%d, "
         "deact_delay=%d",
         req->name, req->enabled, req->layer, req->activation_delay_ms,
         req->deactivation_delay_ms);
@@ -368,19 +368,19 @@ static int handle_set_auto_mouse(const cormoran_rip_SetAutoMouseRequest *req,
         return -ENODEV;
     }
 
-    // Set auto-mouse configuration (persistent)
-    int ret = zmk_input_processor_runtime_set_auto_mouse(
+    // Set temp-layer configuration (persistent)
+    int ret = zmk_input_processor_runtime_set_temp_layer(
         dev, req->enabled, req->layer, req->activation_delay_ms,
         req->deactivation_delay_ms, true);
     if (ret < 0) {
-        LOG_ERR("Failed to set auto-mouse: %d", ret);
+        LOG_ERR("Failed to set temp-layer: %d", ret);
         return ret;
     }
 
     // Return empty response
-    resp->which_response_type = cormoran_rip_Response_set_auto_mouse_tag;
-    resp->response_type.set_auto_mouse = (cormoran_rip_SetAutoMouseResponse)
-        cormoran_rip_SetAutoMouseResponse_init_zero;
+    resp->which_response_type = cormoran_rip_Response_set_temp_layer_tag;
+    resp->response_type.set_temp_layer = (cormoran_rip_SetTempLayerResponse)
+        cormoran_rip_SetTempLayerResponse_init_zero;
 
     return 0;
 }

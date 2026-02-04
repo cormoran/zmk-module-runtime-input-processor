@@ -12,7 +12,7 @@ This ZMK module provides runtime configurable input processors for pointing devi
 - **Multiple Processors**: Support for multiple input processors with individual configuration
 - **Short Names**: Processor names limited to 8 characters for BLE efficiency
 - **Temporary Changes**: Hold a key to temporarily change settings (perfect for DPI toggle)
-- **Auto-Mouse Layer**: Automatically activate a layer when using pointing device, deactivate on key press or timeout
+- **Temp-Layer Layer**: Automatically activate a layer when using pointing device, deactivate on key press or timeout
 
 ## Setup
 
@@ -91,16 +91,16 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
 		rotation-degrees = <0>;
 		track-remainders;
 
-		// Optional: Auto-mouse layer default settings
-		auto-mouse-enabled;  // Enable auto-mouse by default
-		auto-mouse-layer = <1>;  // Default to layer 1
-		auto-mouse-activation-delay-ms = <100>;  // 100ms activation delay
-		auto-mouse-deactivation-delay-ms = <500>;  // 500ms deactivation delay
+		// Optional: Temp-layer layer default settings
+		temp-layer-enabled;  // Enable temp-layer by default
+		temp-layer-layer = <1>;  // Default to layer 1
+		temp-layer-activation-delay-ms = <100>;  // 100ms activation delay
+		temp-layer-deactivation-delay-ms = <500>;  // 500ms deactivation delay
 
 		// Optional: Performance optimization
-		auto-mouse-transparent-behavior = <&trans>;
-		auto-mouse-kp-behavior = <&kp>;
-		auto-mouse-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+		temp-layer-transparent-behavior = <&trans>;
+		temp-layer-kp-behavior = <&kp>;
+		temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
 
 		#input-processor-cells = <0>;
 	};
@@ -182,13 +182,13 @@ When you press and hold a key with the temporary config behavior:
 2. Temporary settings are applied
 3. When you release the key, original settings are restored
 
-### Auto-Mouse Layer
+### Temp-Layer Layer
 
-The auto-mouse layer feature automatically activates a specified layer when you use your pointing device (trackpad, trackball, etc.) and deactivates it after a period of inactivity or when you press a key.
+The temp-layer layer feature automatically activates a specified layer when you use your pointing device (trackpad, trackball, etc.) and deactivates it after a period of inactivity or when you press a key.
 
 **Configuration via Device Tree (Optional):**
 
-You can configure default auto-mouse settings in your device tree:
+You can configure default temp-layer settings in your device tree:
 
 ```dts
 my_pointer_processor: my_pointer_processor {
@@ -196,19 +196,19 @@ my_pointer_processor: my_pointer_processor {
     processor-label = "trackpad";
     // ... basic config ...
     
-    // Enable auto-mouse with default settings
-    auto-mouse-enabled;  // Boolean property - presence enables it
-    auto-mouse-layer = <1>;  // Target layer (default: 0)
-    auto-mouse-activation-delay-ms = <100>;  // Activation delay (default: 100)
-    auto-mouse-deactivation-delay-ms = <500>;  // Deactivation delay (default: 500)
+    // Enable temp-layer with default settings
+    temp-layer-enabled;  // Boolean property - presence enables it
+    temp-layer-layer = <1>;  // Target layer (default: 0)
+    temp-layer-activation-delay-ms = <100>;  // Activation delay (default: 100)
+    temp-layer-deactivation-delay-ms = <500>;  // Deactivation delay (default: 500)
 };
 ```
 
 **Configuration via Web UI:**
 
-Auto-mouse layer settings can also be configured through the web interface:
+Temp-layer layer settings can also be configured through the web interface:
 
-- **Enable/Disable**: Toggle the auto-mouse layer feature
+- **Enable/Disable**: Toggle the temp-layer layer feature
 - **Target Layer**: The layer number to activate (e.g., layer 1, 2, etc.)
 - **Activation Delay**: Time to wait after input starts before activating the layer (milliseconds)
 - **Deactivation Delay**: Time to wait after input stops before deactivating the layer (milliseconds)
@@ -217,13 +217,13 @@ Auto-mouse layer settings can also be configured through the web interface:
 
 - When you move the pointing device, the layer activates after the activation delay
 - The layer stays active while you continue using the pointing device
-- When you press any keyboard key, the layer deactivates immediately (unless it's a modifier or the key is on the auto-mouse layer)
+- When you press any keyboard key, the layer deactivates immediately (unless it's a modifier or the key is on the temp-layer layer)
 - If you stop moving the pointing device, the layer deactivates after the deactivation delay
 - If a key press occurs before the activation delay expires, the layer won't activate
 
-**Keep Auto-Mouse Layer Active:**
+**Keep Temp-Layer Layer Active:**
 
-You can create a behavior to prevent the auto-mouse layer from deactivating while holding a key:
+You can create a behavior to prevent the temp-layer layer from deactivating while holding a key:
 
 ```dts
 #include <behaviors/runtime-input-processor.dtsi>
@@ -233,8 +233,8 @@ You can create a behavior to prevent the auto-mouse layer from deactivating whil
         compatible = "zmk,keymap";
         default_layer {
             bindings = <
-                // auto-mouse keep active
-                &amka  // Hold this key to keep auto-mouse layer active
+                // temp-layer keep active
+                &amka  // Hold this key to keep temp-layer layer active
                 // ... other keys
             >;
         };
@@ -242,7 +242,7 @@ You can create a behavior to prevent the auto-mouse layer from deactivating whil
 };
 ```
 
-When holding the keep-active behavior key, the auto-mouse layer will not deactivate when you press other keys or after the timeout period.
+When holding the keep-active behavior key, the temp-layer layer will not deactivate when you press other keys or after the timeout period.
 
 ## Development Guide
 

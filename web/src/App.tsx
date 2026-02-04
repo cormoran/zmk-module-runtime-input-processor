@@ -90,12 +90,12 @@ export function InputProcessorManager() {
   const [scaleDivisor, setScaleDivisor] = useState<number>(1);
   const [rotationDegrees, setRotationDegrees] = useState<number>(0);
 
-  // Auto-mouse layer state
-  const [autoMouseEnabled, setAutoMouseEnabled] = useState<boolean>(false);
-  const [autoMouseLayer, setAutoMouseLayer] = useState<number>(0);
-  const [autoMouseActivationDelay, setAutoMouseActivationDelay] =
+  // Temp-layer layer state
+  const [tempLayerEnabled, setTempLayerEnabled] = useState<boolean>(false);
+  const [tempLayerLayer, setTempLayerLayer] = useState<number>(0);
+  const [tempLayerActivationDelay, setTempLayerActivationDelay] =
     useState<number>(100);
-  const [autoMouseDeactivationDelay, setAutoMouseDeactivationDelay] =
+  const [tempLayerDeactivationDelay, setTempLayerDeactivationDelay] =
     useState<number>(500);
 
   const subsystem = useMemo(
@@ -202,19 +202,19 @@ export function InputProcessorManager() {
         return;
       }
 
-      // Set auto-mouse configuration
-      const autoMouseRequest = Request.create({
-        setAutoMouse: {
+      // Set temp-layer configuration
+      const tempLayerRequest = Request.create({
+        setTempLayer: {
           name: selectedProcessor,
-          enabled: autoMouseEnabled,
-          layer: autoMouseLayer,
-          activationDelayMs: autoMouseActivationDelay,
-          deactivationDelayMs: autoMouseDeactivationDelay,
+          enabled: tempLayerEnabled,
+          layer: tempLayerLayer,
+          activationDelayMs: tempLayerActivationDelay,
+          deactivationDelayMs: tempLayerDeactivationDelay,
         },
       });
-      const autoMouseResp = await callRPC(autoMouseRequest);
-      if (autoMouseResp?.error) {
-        setError(autoMouseResp.error.message);
+      const tempLayerResp = await callRPC(tempLayerRequest);
+      if (tempLayerResp?.error) {
+        setError(tempLayerResp.error.message);
         setIsLoading(false);
         return;
       }
@@ -233,10 +233,10 @@ export function InputProcessorManager() {
     scaleMultiplier,
     scaleDivisor,
     rotationDegrees,
-    autoMouseEnabled,
-    autoMouseLayer,
-    autoMouseActivationDelay,
-    autoMouseDeactivationDelay,
+    tempLayerEnabled,
+    tempLayerLayer,
+    tempLayerActivationDelay,
+    tempLayerDeactivationDelay,
   ]);
 
   const selectProcessor = useCallback(
@@ -247,10 +247,10 @@ export function InputProcessorManager() {
         setScaleMultiplier(proc.scaleMultiplier);
         setScaleDivisor(proc.scaleDivisor);
         setRotationDegrees(proc.rotationDegrees);
-        setAutoMouseEnabled(proc.autoMouseEnabled);
-        setAutoMouseLayer(proc.autoMouseLayer);
-        setAutoMouseActivationDelay(proc.autoMouseActivationDelayMs);
-        setAutoMouseDeactivationDelay(proc.autoMouseDeactivationDelayMs);
+        setTempLayerEnabled(proc.tempLayerEnabled);
+        setTempLayerLayer(proc.tempLayerLayer);
+        setTempLayerActivationDelay(proc.tempLayerActivationDelayMs);
+        setTempLayerDeactivationDelay(proc.tempLayerDeactivationDelayMs);
       }
     },
     [processors]
@@ -296,10 +296,10 @@ export function InputProcessorManager() {
               setScaleMultiplier(proc.scaleMultiplier);
               setScaleDivisor(proc.scaleDivisor);
               setRotationDegrees(proc.rotationDegrees);
-              setAutoMouseEnabled(proc.autoMouseEnabled);
-              setAutoMouseLayer(proc.autoMouseLayer);
-              setAutoMouseActivationDelay(proc.autoMouseActivationDelayMs);
-              setAutoMouseDeactivationDelay(proc.autoMouseDeactivationDelayMs);
+              setTempLayerEnabled(proc.tempLayerEnabled);
+              setTempLayerLayer(proc.tempLayerLayer);
+              setTempLayerActivationDelay(proc.tempLayerActivationDelayMs);
+              setTempLayerDeactivationDelay(proc.tempLayerDeactivationDelayMs);
             }
 
             // If no processor is selected yet, select the first one
@@ -308,10 +308,10 @@ export function InputProcessorManager() {
               setScaleMultiplier(proc.scaleMultiplier);
               setScaleDivisor(proc.scaleDivisor);
               setRotationDegrees(proc.rotationDegrees);
-              setAutoMouseEnabled(proc.autoMouseEnabled);
-              setAutoMouseLayer(proc.autoMouseLayer);
-              setAutoMouseActivationDelay(proc.autoMouseActivationDelayMs);
-              setAutoMouseDeactivationDelay(proc.autoMouseDeactivationDelayMs);
+              setTempLayerEnabled(proc.tempLayerEnabled);
+              setTempLayerLayer(proc.tempLayerLayer);
+              setTempLayerActivationDelay(proc.tempLayerActivationDelayMs);
+              setTempLayerDeactivationDelay(proc.tempLayerDeactivationDelayMs);
             }
           }
         } catch (err) {
@@ -389,8 +389,8 @@ export function InputProcessorManager() {
                 >
                   Scale: {proc.scaleMultiplier}/{proc.scaleDivisor} | Rotation:{" "}
                   {proc.rotationDegrees}°
-                  {proc.autoMouseEnabled &&
-                    ` | Auto-Mouse: Layer ${proc.autoMouseLayer}`}
+                  {proc.tempLayerEnabled &&
+                    ` | Temp-Layer: Layer ${proc.tempLayerLayer}`}
                 </div>
               </div>
             ))}
@@ -459,36 +459,36 @@ export function InputProcessorManager() {
 
           <hr style={{ margin: "1.5rem 0", border: "1px solid #e0e0e0" }} />
 
-          <h3>Auto-Mouse Layer</h3>
+          <h3>Temp-Layer Layer</h3>
           <p style={{ fontSize: "0.9em", color: "#666", marginBottom: "1rem" }}>
             Automatically activate a layer when using the pointing device
           </p>
 
           <div className="input-group">
-            <label htmlFor="auto-mouse-enabled">
+            <label htmlFor="temp-layer-enabled">
               <input
-                id="auto-mouse-enabled"
+                id="temp-layer-enabled"
                 type="checkbox"
-                checked={autoMouseEnabled}
-                onChange={(e) => setAutoMouseEnabled(e.target.checked)}
+                checked={tempLayerEnabled}
+                onChange={(e) => setTempLayerEnabled(e.target.checked)}
                 style={{ marginRight: "0.5rem" }}
               />
-              Enable Auto-Mouse Layer
+              Enable Temp-Layer Layer
             </label>
           </div>
 
-          {autoMouseEnabled && (
+          {tempLayerEnabled && (
             <>
               <div className="input-group">
-                <label htmlFor="auto-mouse-layer">Target Layer:</label>
+                <label htmlFor="temp-layer-layer">Target Layer:</label>
                 <input
-                  id="auto-mouse-layer"
+                  id="temp-layer-layer"
                   type="number"
                   min="0"
                   max="15"
-                  value={autoMouseLayer}
+                  value={tempLayerLayer}
                   onChange={(e) =>
-                    setAutoMouseLayer(parseInt(e.target.value) || 0)
+                    setTempLayerLayer(parseInt(e.target.value) || 0)
                   }
                 />
                 <div
@@ -510,9 +510,9 @@ export function InputProcessorManager() {
                   min="0"
                   max="5000"
                   step="10"
-                  value={autoMouseActivationDelay}
+                  value={tempLayerActivationDelay}
                   onChange={(e) =>
-                    setAutoMouseActivationDelay(parseInt(e.target.value) || 0)
+                    setTempLayerActivationDelay(parseInt(e.target.value) || 0)
                   }
                 />
                 <div
@@ -536,9 +536,9 @@ export function InputProcessorManager() {
                   min="0"
                   max="5000"
                   step="10"
-                  value={autoMouseDeactivationDelay}
+                  value={tempLayerDeactivationDelay}
                   onChange={(e) =>
-                    setAutoMouseDeactivationDelay(parseInt(e.target.value) || 0)
+                    setTempLayerDeactivationDelay(parseInt(e.target.value) || 0)
                   }
                 />
                 <div

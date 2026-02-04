@@ -10,4 +10,4 @@ cormoran.rip.SetScaleMultiplierRequest.name max_size:8
 cormoran.rip.SetScaleDivisorRequest.name max_size:8
 cormoran.rip.SetRotationRequest.name max_size:8
 cormoran.rip.ResetInputProcessorRequest.name max_size:8
-cormoran.rip.SetAutoMouseRequest.name max_size:8
+cormoran.rip.SetTempLayerRequest.name max_size:8

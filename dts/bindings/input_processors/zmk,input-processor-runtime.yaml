@@ -51,39 +51,39 @@ properties:
     type: boolean
     description: Track remainders for scaling operations (enabled if present)
 
-  auto-mouse-transparent-behavior:
+  temp-layer-transparent-behavior:
     type: phandle
     description: |
       Behavior to compare against for transparent detection (typically &trans).
-      Used for efficient auto-mouse layer deactivation logic.
+      Used for efficient temp-layer layer deactivation logic.
 
-  auto-mouse-kp-behavior:
+  temp-layer-kp-behavior:
     type: phandle
     description: |
       Behavior to compare against for key press detection (typically &kp).
-      Used to identify modifier keys for auto-mouse layer deactivation logic.
+      Used to identify modifier keys for temp-layer layer deactivation logic.
 
-  auto-mouse-keep-keycodes:
+  temp-layer-keep-keycodes:
     type: array
     description: |
-      List of modifier keycodes that should not deactivate the auto-mouse layer.
+      List of modifier keycodes that should not deactivate the temp-layer layer.
       Typically includes LCTRL, LSHIFT, LALT, LGUI, RCTRL, RSHIFT, RALT, RGUI.
 
-  auto-mouse-enabled:
+  temp-layer-enabled:
     type: boolean
-    description: If present, auto-mouse layer is enabled by default
+    description: If present, temp-layer layer is enabled by default
 
-  auto-mouse-layer:
+  temp-layer-layer:
     type: int
     default: 0
-    description: Default target layer ID for auto-mouse
+    description: Default target layer ID for temp-layer
 
-  auto-mouse-activation-delay-ms:
+  temp-layer-activation-delay-ms:
     type: int
     default: 100
-    description: Default delay before activating auto-mouse layer (milliseconds)
+    description: Default delay before activating temp-layer layer (milliseconds)
 
-  auto-mouse-deactivation-delay-ms:
+  temp-layer-deactivation-delay-ms:
     type: int
     default: 500
-    description: Default delay before deactivating auto-mouse layer after input stops (milliseconds)
+    description: Default delay before deactivating temp-layer layer after input stops (milliseconds)
