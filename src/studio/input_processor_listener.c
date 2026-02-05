@@ -84,6 +84,7 @@ static int input_processor_state_changed_listener(const zmk_event_t *eh) {
         ev->config.temp_layer_activation_delay_ms;
     info->temp_layer_deactivation_delay_ms =
         ev->config.temp_layer_deactivation_delay_ms;
+    info->active_layers                = ev->config.active_layers;
 
     // Send notification via custom studio subsystem
     pb_callback_t encode_cb = {.funcs.encode = encode_notification,

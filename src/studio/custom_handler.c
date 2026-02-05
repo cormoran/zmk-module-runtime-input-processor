@@ -11,6 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/input_processor_state_changed.h>
+#include <zmk/keymap.h>
 #include <zmk/pointing/input_processor_runtime.h>
 #include <zmk/studio/custom.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -66,6 +67,9 @@ static int handle_set_temp_layer_deactivation_delay(
     cormoran_rip_Response *resp);
 static int handle_set_active_layers(
     const cormoran_rip_SetActiveLayersRequest *req,
+    cormoran_rip_Response *resp);
+static int handle_get_layer_info(
+    const cormoran_rip_GetLayerInfoRequest *req,
     cormoran_rip_Response *resp);
 
 /**
@@ -135,6 +139,10 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         case cormoran_rip_Request_set_active_layers_tag:
             rc = handle_set_active_layers(
                 &req.request_type.set_active_layers, resp);
+            break;
+        case cormoran_rip_Request_get_layer_info_tag:
+            rc = handle_get_layer_info(
+                &req.request_type.get_layer_info, resp);
             break;
         default:
             LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -550,6 +558,45 @@ static int handle_set_active_layers(
         (cormoran_rip_SetActiveLayersResponse)
             cormoran_rip_SetActiveLayersResponse_init_zero;
 
+    return 0;
+}
+
+/**
+ * Handle getting layer information
+ */
+static int handle_get_layer_info(
+    const cormoran_rip_GetLayerInfoRequest *req,
+    cormoran_rip_Response *resp) {
+    LOG_DBG("Getting layer information");
+
+    cormoran_rip_GetLayerInfoResponse result =
+        cormoran_rip_GetLayerInfoResponse_init_zero;
+
+    // Iterate through all layers and get their names
+    int layer_count = 0;
+    for (int layer_idx = 0; layer_idx < ZMK_KEYMAP_LAYERS_LEN && layer_count < 32; layer_idx++) {
+        zmk_keymap_layer_id_t layer_id = zmk_keymap_layer_index_to_id(layer_idx);
+        
+        if (layer_id == ZMK_KEYMAP_LAYER_ID_INVAL) {
+            continue;
+        }
+        
+        const char *layer_name = zmk_keymap_layer_name(layer_id);
+        if (layer_name) {
+            result.layers[layer_count].index = layer_idx;
+            strncpy(result.layers[layer_count].name, layer_name, 
+                    sizeof(result.layers[layer_count].name) - 1);
+            result.layers[layer_count].name[sizeof(result.layers[layer_count].name) - 1] = '\0';
+            layer_count++;
+        }
+    }
+    
+    result.layers_count = layer_count;
+
+    resp->which_response_type = cormoran_rip_Response_get_layer_info_tag;
+    resp->response_type.get_layer_info = result;
+
+    LOG_DBG("Returned %d layers", layer_count);
     return 0;
 }
 

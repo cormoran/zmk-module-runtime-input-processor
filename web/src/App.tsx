@@ -21,9 +21,6 @@ import {
 // Custom subsystem identifier - must match firmware registration
 export const SUBSYSTEM_IDENTIFIER = "cormoran_rip";
 
-// Maximum number of layers supported (matches ZMK's 32-bit layer state)
-const MAX_LAYERS = 32;
-
 function App() {
   return (
     <div className="app">
@@ -87,6 +84,11 @@ export function InputProcessorManager() {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Layer information
+  const [layers, setLayers] = useState<Array<{ index: number; name: string }>>(
+    []
+  );
 
   // Form state
   const [scaleMultiplier, setScaleMultiplier] = useState<number>(1);
@@ -155,6 +157,23 @@ export function InputProcessorManager() {
       );
     } finally {
       setIsLoading(false);
+    }
+  }, [callRPC]);
+
+  const loadLayerInfo = useCallback(async () => {
+    try {
+      const request = Request.create({
+        getLayerInfo: {},
+      });
+
+      const resp = await callRPC(request);
+      if (resp?.getLayerInfo?.layers) {
+        setLayers(resp.getLayerInfo.layers);
+      } else if (resp?.error) {
+        console.error("Failed to load layer info:", resp.error.message);
+      }
+    } catch (err) {
+      console.error("Failed to load layer info:", err);
     }
   }, [callRPC]);
 
@@ -320,6 +339,7 @@ export function InputProcessorManager() {
   useEffect(() => {
     if (subsystem) {
       loadProcessors();
+      loadLayerInfo();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subsystem]);
@@ -547,16 +567,26 @@ export function InputProcessorManager() {
             <>
               <div className="input-group">
                 <label htmlFor="temp-layer">Target Layer:</label>
-                <input
+                <select
                   id="temp-layer"
-                  type="number"
-                  min="0"
-                  max="15"
                   value={tempLayerLayer}
                   onChange={(e) =>
                     setTempLayerLayer(parseInt(e.target.value) || 0)
                   }
-                />
+                  style={{ padding: "0.5rem", fontSize: "1rem" }}
+                >
+                  {layers.length > 0
+                    ? layers.map((layer) => (
+                        <option key={layer.index} value={layer.index}>
+                          {layer.name} (Layer {layer.index})
+                        </option>
+                      ))
+                    : Array.from({ length: 16 }, (_, i) => i).map((i) => (
+                        <option key={i} value={i}>
+                          Layer {i}
+                        </option>
+                      ))}
+                </select>
                 <div
                   style={{
                     fontSize: "0.85em",
@@ -564,7 +594,7 @@ export function InputProcessorManager() {
                     marginTop: "0.25rem",
                   }}
                 >
-                  Layer number to activate (0-15)
+                  Layer to activate when using pointing device
                 </div>
               </div>
 
@@ -663,40 +693,47 @@ export function InputProcessorManager() {
               borderRadius: "4px",
             }}
           >
-            <strong>Layer Checkboxes:</strong>
+            <strong>Select Layers:</strong>
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
+                gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
                 gap: "0.5rem",
                 marginTop: "0.5rem",
               }}
             >
-              {Array.from({ length: MAX_LAYERS }, (_, i) => i).map((layer) => (
-                <label
-                  key={layer}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    fontSize: "0.9em",
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={(activeLayers & (1 << layer)) !== 0}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setActiveLayers(activeLayers | (1 << layer));
-                      } else {
-                        setActiveLayers(activeLayers & ~(1 << layer));
-                      }
+              {layers.length > 0 ? (
+                layers.map((layer) => (
+                  <label
+                    key={layer.index}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      fontSize: "0.9em",
+                      cursor: "pointer",
+                      padding: "0.25rem",
                     }}
-                    style={{ marginRight: "0.25rem" }}
-                  />
-                  Layer {layer}
-                </label>
-              ))}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={(activeLayers & (1 << layer.index)) !== 0}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setActiveLayers(activeLayers | (1 << layer.index));
+                        } else {
+                          setActiveLayers(activeLayers & ~(1 << layer.index));
+                        }
+                      }}
+                      style={{ marginRight: "0.5rem" }}
+                    />
+                    {layer.name}
+                  </label>
+                ))
+              ) : (
+                <p style={{ fontSize: "0.9em", color: "#666" }}>
+                  Loading layers...
+                </p>
+              )}
             </div>
           </div>
 

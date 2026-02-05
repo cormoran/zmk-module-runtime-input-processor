@@ -35,6 +35,19 @@ message GetInputProcessorResponse {
     InputProcessorInfo processor = 1;
 }
 
+message LayerInfo {
+    uint32 index = 1;  // Layer index
+    string name = 2;   // Layer name
+}
+
+message GetLayerInfoRequest {
+    // Empty - requests list of all layers
+}
+
+message GetLayerInfoResponse {
+    repeated LayerInfo layers = 1;  // List of layers with their names
+}
+
 message SetScaleMultiplierRequest {
     uint32 id    = 1;  // ID of the input processor to update
     uint32 value = 2;  // New scaling multiplier
@@ -128,6 +141,7 @@ message Request {
         SetTempLayerActivationDelayRequest set_temp_layer_activation_delay = 9;
         SetTempLayerDeactivationDelayRequest set_temp_layer_deactivation_delay = 10;
         SetActiveLayersRequest set_active_layers = 11;
+        GetLayerInfoRequest get_layer_info = 12;
     }
 }
 
@@ -149,6 +163,7 @@ message Response {
         SetTempLayerActivationDelayResponse set_temp_layer_activation_delay = 10;
         SetTempLayerDeactivationDelayResponse set_temp_layer_deactivation_delay = 11;
         SetActiveLayersResponse set_active_layers = 12;
+        GetLayerInfoResponse get_layer_info = 13;
     }
 }
 
