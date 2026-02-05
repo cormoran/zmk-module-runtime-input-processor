@@ -1,4 +1,0 @@
-# Nanopb options for custom.proto
-
-# Set max count for repeated layers field
-cormoran.rip.GetLayerInfoResponse.layers max_count:32

@@ -564,39 +564,78 @@ static int handle_set_active_layers(
 /**
  * Handle getting layer information
  */
+
+// Callback to encode layer info
+struct layer_info_context {
+    int current_idx;
+    int layer_count;
+};
+
+static bool encode_layer_name(pb_ostream_t *stream, const pb_field_t *field,
+                              void *const *arg) {
+    const char *name = (const char *)*arg;
+    if (!pb_encode_tag_for_field(stream, field)) {
+        return false;
+    }
+    return pb_encode_string(stream, (const pb_byte_t *)name, strlen(name));
+}
+
+static bool encode_layer_info(pb_ostream_t *stream, const pb_field_t *field,
+                              void *const *arg) {
+    struct layer_info_context *ctx = (struct layer_info_context *)*arg;
+
+    for (int layer_idx = 0; layer_idx < ZMK_KEYMAP_LAYERS_LEN && ctx->current_idx < 32;
+         layer_idx++) {
+        zmk_keymap_layer_id_t layer_id = zmk_keymap_layer_index_to_id(layer_idx);
+
+        if (layer_id == ZMK_KEYMAP_LAYER_ID_INVAL) {
+            continue;
+        }
+
+        const char *layer_name = zmk_keymap_layer_name(layer_id);
+        if (layer_name) {
+            cormoran_rip_LayerInfo info = cormoran_rip_LayerInfo_init_zero;
+            info.index = layer_idx;
+            
+            // Set up callback for encoding the name string
+            info.name.funcs.encode = encode_layer_name;
+            info.name.arg = (void *)layer_name;
+
+            if (!pb_encode_tag_for_field(stream, field)) {
+                return false;
+            }
+
+            if (!pb_encode_submessage(stream, cormoran_rip_LayerInfo_fields,
+                                     &info)) {
+                return false;
+            }
+
+            ctx->current_idx++;
+            ctx->layer_count++;
+        }
+    }
+
+    return true;
+}
+
 static int handle_get_layer_info(
     const cormoran_rip_GetLayerInfoRequest *req,
     cormoran_rip_Response *resp) {
     LOG_DBG("Getting layer information");
 
+    struct layer_info_context ctx = {.current_idx = 0, .layer_count = 0};
+
     cormoran_rip_GetLayerInfoResponse result =
         cormoran_rip_GetLayerInfoResponse_init_zero;
 
-    // Iterate through all layers and get their names
-    int layer_count = 0;
-    for (int layer_idx = 0; layer_idx < ZMK_KEYMAP_LAYERS_LEN && layer_count < 32; layer_idx++) {
-        zmk_keymap_layer_id_t layer_id = zmk_keymap_layer_index_to_id(layer_idx);
-        
-        if (layer_id == ZMK_KEYMAP_LAYER_ID_INVAL) {
-            continue;
-        }
-        
-        const char *layer_name = zmk_keymap_layer_name(layer_id);
-        if (layer_name) {
-            result.layers[layer_count].index = layer_idx;
-            strncpy(result.layers[layer_count].name, layer_name, 
-                    sizeof(result.layers[layer_count].name) - 1);
-            result.layers[layer_count].name[sizeof(result.layers[layer_count].name) - 1] = '\0';
-            layer_count++;
-        }
-    }
-    
-    result.layers_count = layer_count;
+    // Set up callback for encoding layers
+    result.layers.funcs.encode = encode_layer_info;
+    result.layers.arg = &ctx;
 
     resp->which_response_type = cormoran_rip_Response_get_layer_info_tag;
     resp->response_type.get_layer_info = result;
 
-    LOG_DBG("Returned %d layers", layer_count);
+    LOG_DBG("Returned %d layers", ctx.layer_count);
     return 0;
 }
 
