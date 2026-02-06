@@ -9,4 +9,5 @@ plugins:
       - outputClientImpl=false
       - useExactTypes=false
       - esModuleInterop=true
+      - enumsAsLiterals=true
     out: src/proto

@@ -95,3 +95,24 @@ properties:
       Bitmask of layers where processor should be active (0 = all layers).
       Each bit represents a layer: bit 0 = layer 0, bit 1 = layer 1, etc.
       If at least one specified layer is active, the processor works.
+
+  axis-snap-mode:
+    type: int
+    default: 0
+    description: |
+      Axis snapping mode: 0 = none, 1 = snap to X axis, 2 = snap to Y axis.
+      When enabled, movement is locked to the selected axis unless threshold is exceeded.
+
+  axis-snap-threshold:
+    type: int
+    default: 100
+    description: |
+      Threshold for axis snap unlock. When cross-axis movement exceeds this value
+      within the timeout window, the snap lock is released.
+
+  axis-snap-timeout-ms:
+    type: int
+    default: 1000
+    description: |
+      Time window (in milliseconds) for checking if cross-axis movement exceeds threshold.
+      If threshold is not exceeded within this time, the snap lock window resets.

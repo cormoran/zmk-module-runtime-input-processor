@@ -85,6 +85,9 @@ static int input_processor_state_changed_listener(const zmk_event_t *eh) {
     info->temp_layer_deactivation_delay_ms =
         ev->config.temp_layer_deactivation_delay_ms;
     info->active_layers                = ev->config.active_layers;
+    info->axis_snap_mode               = ev->config.axis_snap_mode;
+    info->axis_snap_threshold          = ev->config.axis_snap_threshold;
+    info->axis_snap_timeout_ms         = ev->config.axis_snap_timeout_ms;
 
     // Send notification via custom studio subsystem
     pb_callback_t encode_cb = {.funcs.encode = encode_notification,

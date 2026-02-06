@@ -10,6 +10,15 @@
 #include <stdbool.h>
 
 /**
+ * @brief Axis snap mode
+ */
+enum zmk_input_processor_axis_snap_mode {
+    ZMK_INPUT_PROCESSOR_AXIS_SNAP_MODE_NONE = 0,
+    ZMK_INPUT_PROCESSOR_AXIS_SNAP_MODE_X = 1,
+    ZMK_INPUT_PROCESSOR_AXIS_SNAP_MODE_Y = 2,
+};
+
+/**
  * @brief Runtime input processor configuration
  */
 struct zmk_input_processor_runtime_config {
@@ -23,6 +32,10 @@ struct zmk_input_processor_runtime_config {
     uint16_t temp_layer_deactivation_delay_ms;
     // Active layers bitmask (0 = all layers, otherwise each bit represents a layer)
     uint32_t active_layers;
+    // Axis snap settings
+    uint8_t axis_snap_mode;  // zmk_input_processor_axis_snap_mode
+    uint16_t axis_snap_threshold;  // Threshold for unsnapping
+    uint16_t axis_snap_timeout_ms;  // Time window for checking threshold
 };
 
 /**
@@ -194,3 +207,55 @@ int zmk_input_processor_runtime_set_active_layers(const struct device *dev,
  * @param keep_active If true, prevent temp-layer from deactivating; if false, allow deactivation
  */
 void zmk_input_processor_runtime_temp_layer_keep_active(const struct device *dev, bool keep_active);
+
+/**
+ * @brief Set axis snap mode
+ *
+ * @param dev Pointer to the device structure
+ * @param mode Snap mode (NONE, X, or Y)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_axis_snap_mode(const struct device *dev,
+                                                    uint8_t mode,
+                                                    bool persistent);
+
+/**
+ * @brief Set axis snap threshold
+ *
+ * @param dev Pointer to the device structure
+ * @param threshold Threshold value for unsnapping
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_axis_snap_threshold(const struct device *dev,
+                                                         uint16_t threshold,
+                                                         bool persistent);
+
+/**
+ * @brief Set axis snap timeout
+ *
+ * @param dev Pointer to the device structure
+ * @param timeout_ms Time window for checking threshold (ms)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_axis_snap_timeout(const struct device *dev,
+                                                       uint16_t timeout_ms,
+                                                       bool persistent);
+
+/**
+ * @brief Set all axis snap configuration
+ *
+ * @param dev Pointer to the device structure
+ * @param mode Snap mode (NONE, X, or Y)
+ * @param threshold Threshold value for unsnapping
+ * @param timeout_ms Time window for checking threshold (ms)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_axis_snap(const struct device *dev,
+                                               uint8_t mode,
+                                               uint16_t threshold,
+                                               uint16_t timeout_ms,
+                                               bool persistent);

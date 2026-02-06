@@ -8,12 +8,12 @@ This ZMK module provides runtime configurable input processors for pointing devi
 - **Web Interface**: Configure settings through a browser-based UI
 - **Scaling Support**: Configure speed multipliers (e.g., x2 faster, x0.5 slower)
 - **Rotation Support**: Apply rotation transformations in degrees (fully implemented with paired X/Y handling)
-- **Persistent Settings**: Settings saved to non-volatile storage
-- **Multiple Processors**: Support for multiple input processors with individual configuration
-- **Short Names**: Processor names limited to 8 characters for BLE efficiency
-- **Temporary Changes**: Hold a key to temporarily change settings (perfect for DPI toggle)
+- **Axis Snapping**: Lock scrolling to X or Y axis with threshold-based unlock
 - **Temp-Layer Layer**: Automatically activate a layer when using pointing device, deactivate on key press or timeout
 - **Active Layers**: Specify which layers the processor should be active on using a bitmask
+- **Temporary Changes**: Hold a key to temporarily change settings (perfect for DPI toggle)
+- **Persistent Settings**: Settings saved to non-volatile storage
+- **Multiple Processors**: Support for multiple input processors with individual configuration
 
 ## Setup
 
@@ -289,6 +289,101 @@ The web interface provides two ways to configure active layers:
 - If at least one of the specified layers is active, the processor works normally
 - If none of the specified layers are active, the processor skips processing (no transformation applied)
 - This allows you to have different pointer speeds or behaviors on different layers
+
+### Axis Snapping
+
+The axis snapping feature locks scrolling to a specific axis (X or Y), preventing unwanted diagonal scrolling. Movement on the locked axis is suppressed unless it exceeds a configurable threshold within a timeout window.
+
+**Configuration via Device Tree:**
+
+```dts
+#include <dt-bindings/zmk/input_processor.h>
+
+scroll_runtime_input_processor: scroll_runtime_input_processor {
+    compatible = "zmk,input-processor-runtime";
+    processor-label = "scroll";
+    // ... basic config ...
+
+    // Lock to Y axis for vertical scrolling only
+    axis-snap-mode = <AXIS_SNAP_MODE_Y>;
+    axis-snap-threshold = <100>;  // Unlock if cross-axis movement > 100
+    axis-snap-timeout-ms = <1000>;  // Decay period
+};
+```
+
+Available axis snap mode constants:
+
+- `AXIS_SNAP_MODE_NONE` (0): No snapping
+- `AXIS_SNAP_MODE_X` (1): Snap to X axis (horizontal only)
+- `AXIS_SNAP_MODE_Y` (2): Snap to Y axis (vertical only)
+
+**Configuration via Web UI:**
+
+The web interface provides controls for axis snapping:
+
+1. **Snap Mode**: Select no-snap, snap to X axis, or snap to Y axis
+2. **Unlock Threshold**: Set how much cross-axis movement is needed to unlock the snap
+3. **Timeout Window**: Set the time window for checking the threshold
+
+**Snap Modes:**
+
+- **No Snap (0)**: Normal operation, no axis locking
+- **Snap to X Axis (1)**: Only horizontal movement, vertical suppressed unless threshold exceeded
+- **Snap to Y Axis (2)**: Only vertical movement, horizontal suppressed unless threshold exceeded
+
+**Behavior:**
+
+- When snap is enabled, movement on the locked axis proceeds normally
+- Movement on the cross-axis is accumulated but suppressed (value set to 0)
+- The accumulator decays over time (threshold amount over the timeout period)
+- If accumulated cross-axis movement exceeds the threshold, the snap lock is released
+- If no cross-axis movement occurs, the accumulator decays to zero after the timeout period
+
+**Example Use Cases:**
+
+- **Wheel Scroll**: Set `axis-snap-mode = <2>` on scroll processor to ensure wheel only scrolls vertically
+- **Text Selection**: Use the temporary snap behavior to lock Y-axis while selecting text with mouse
+
+**Temporary Snap Behavior:**
+
+You can temporarily enable axis snapping while holding a key using binding parameters:
+
+```dts
+#include <behaviors/runtime-input-processor.dtsi>
+#include <dt-bindings/zmk/input_processor.h>
+
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+        default_layer {
+            bindings = <
+                &ysnap AXIS_SNAP_MODE_Y 100   // Hold for Y-axis snap (threshold=100)
+                &xsnap AXIS_SNAP_MODE_X 50    // Hold for X-axis snap (threshold=50)
+                // ... other keys
+            >;
+        };
+    };
+};
+```
+
+The behavior takes two parameters:
+
+- **param1**: Snap mode (use constants: `AXIS_SNAP_MODE_NONE`, `AXIS_SNAP_MODE_X`, `AXIS_SNAP_MODE_Y`)
+- **param2**: Threshold for unlocking snap
+
+You can also configure the timeout in the behavior definition:
+
+```dts
+&ysnap {
+    timeout-ms = <500>;  // Custom timeout (default: 1000ms)
+};
+```
+
+When you press and hold the snap behavior key:
+
+1. Current snap settings are saved
+2. Temporary snap settings are applied (with 1000ms timeout)
+3. When you release the key, original settings are restored
 
 ## Development Guide
 

@@ -71,6 +71,15 @@ static int handle_set_active_layers(
 static int handle_get_layer_info(
     const cormoran_rip_GetLayerInfoRequest *req,
     cormoran_rip_Response *resp);
+static int handle_set_axis_snap_mode(
+    const cormoran_rip_SetAxisSnapModeRequest *req,
+    cormoran_rip_Response *resp);
+static int handle_set_axis_snap_threshold(
+    const cormoran_rip_SetAxisSnapThresholdRequest *req,
+    cormoran_rip_Response *resp);
+static int handle_set_axis_snap_timeout(
+    const cormoran_rip_SetAxisSnapTimeoutRequest *req,
+    cormoran_rip_Response *resp);
 
 /**
  * Main request handler for the custom RPC subsystem.
@@ -143,6 +152,18 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         case cormoran_rip_Request_get_layer_info_tag:
             rc = handle_get_layer_info(
                 &req.request_type.get_layer_info, resp);
+            break;
+        case cormoran_rip_Request_set_axis_snap_mode_tag:
+            rc = handle_set_axis_snap_mode(
+                &req.request_type.set_axis_snap_mode, resp);
+            break;
+        case cormoran_rip_Request_set_axis_snap_threshold_tag:
+            rc = handle_set_axis_snap_threshold(
+                &req.request_type.set_axis_snap_threshold, resp);
+            break;
+        case cormoran_rip_Request_set_axis_snap_timeout_tag:
+            rc = handle_set_axis_snap_timeout(
+                &req.request_type.set_axis_snap_timeout, resp);
             break;
         default:
             LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -557,6 +578,102 @@ static int handle_set_active_layers(
     resp->response_type.set_active_layers =
         (cormoran_rip_SetActiveLayersResponse)
             cormoran_rip_SetActiveLayersResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting axis snap mode
+ */
+static int handle_set_axis_snap_mode(
+    const cormoran_rip_SetAxisSnapModeRequest *req,
+    cormoran_rip_Response *resp) {
+    LOG_DBG("Setting axis snap mode for id=%d to %d", req->id, req->mode);
+
+    const struct device *dev =
+        zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set axis snap mode (persistent)
+    int ret = zmk_input_processor_runtime_set_axis_snap_mode(
+        dev, req->mode, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set axis snap mode: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_axis_snap_mode_tag;
+    resp->response_type.set_axis_snap_mode =
+        (cormoran_rip_SetAxisSnapModeResponse)
+            cormoran_rip_SetAxisSnapModeResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting axis snap threshold
+ */
+static int handle_set_axis_snap_threshold(
+    const cormoran_rip_SetAxisSnapThresholdRequest *req,
+    cormoran_rip_Response *resp) {
+    LOG_DBG("Setting axis snap threshold for id=%d to %d", req->id, req->threshold);
+
+    const struct device *dev =
+        zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set axis snap threshold (persistent)
+    int ret = zmk_input_processor_runtime_set_axis_snap_threshold(
+        dev, req->threshold, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set axis snap threshold: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_axis_snap_threshold_tag;
+    resp->response_type.set_axis_snap_threshold =
+        (cormoran_rip_SetAxisSnapThresholdResponse)
+            cormoran_rip_SetAxisSnapThresholdResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting axis snap timeout
+ */
+static int handle_set_axis_snap_timeout(
+    const cormoran_rip_SetAxisSnapTimeoutRequest *req,
+    cormoran_rip_Response *resp) {
+    LOG_DBG("Setting axis snap timeout for id=%d to %d ms", req->id, req->timeout_ms);
+
+    const struct device *dev =
+        zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set axis snap timeout (persistent)
+    int ret = zmk_input_processor_runtime_set_axis_snap_timeout(
+        dev, req->timeout_ms, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set axis snap timeout: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_axis_snap_timeout_tag;
+    resp->response_type.set_axis_snap_timeout =
+        (cormoran_rip_SetAxisSnapTimeoutResponse)
+            cormoran_rip_SetAxisSnapTimeoutResponse_init_zero;
 
     return 0;
 }

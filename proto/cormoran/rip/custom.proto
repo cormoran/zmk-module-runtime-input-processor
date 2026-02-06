@@ -2,6 +2,13 @@ syntax = "proto3";
 
 package cormoran.rip;
 
+// Axis snap mode enum
+enum AxisSnapMode {
+    AXIS_SNAP_MODE_NONE = 0;  // No snapping
+    AXIS_SNAP_MODE_X = 1;     // Snap to X axis
+    AXIS_SNAP_MODE_Y = 2;     // Snap to Y axis
+}
+
 // Runtime Input Processor Messages
 message InputProcessorInfo {
     uint32 id               = 1;  // Processor ID (index in array)
@@ -17,6 +24,10 @@ message InputProcessorInfo {
     uint32 temp_layer_deactivation_delay_ms = 9;  // Delay before deactivating (ms)
     // Active layers bitmask (0 = all layers)
     uint32 active_layers = 10;  // Bitmask of layers where processor is active
+    // Axis snap settings
+    AxisSnapMode axis_snap_mode = 11;  // Snap mode
+    uint32 axis_snap_threshold = 12;  // Threshold for unsnapping
+    uint32 axis_snap_timeout_ms = 13;  // Time window for threshold check (ms)
 }
 
 message ListInputProcessorsRequest {
@@ -92,6 +103,21 @@ message SetActiveLayersRequest {
     uint32 layers = 2;  // Bitmask of layers where processor is active (0 = all)
 }
 
+message SetAxisSnapModeRequest {
+    uint32 id          = 1;  // ID of the input processor to update
+    AxisSnapMode mode  = 2;  // Snap mode
+}
+
+message SetAxisSnapThresholdRequest {
+    uint32 id        = 1;  // ID of the input processor to update
+    uint32 threshold = 2;  // Threshold for unsnapping
+}
+
+message SetAxisSnapTimeoutRequest {
+    uint32 id         = 1;  // ID of the input processor to update
+    uint32 timeout_ms = 2;  // Time window for threshold check (ms)
+}
+
 message SetScaleMultiplierResponse {
     // Empty - use notification to report changes
 }
@@ -128,6 +154,18 @@ message SetActiveLayersResponse {
     // Empty - use notification to report changes
 }
 
+message SetAxisSnapModeResponse {
+    // Empty - use notification to report changes
+}
+
+message SetAxisSnapThresholdResponse {
+    // Empty - use notification to report changes
+}
+
+message SetAxisSnapTimeoutResponse {
+    // Empty - use notification to report changes
+}
+
 message Request {
     oneof request_type {
         ListInputProcessorsRequest list_input_processors = 1;
@@ -142,6 +180,9 @@ message Request {
         SetTempLayerDeactivationDelayRequest set_temp_layer_deactivation_delay = 10;
         SetActiveLayersRequest set_active_layers = 11;
         GetLayerInfoRequest get_layer_info = 12;
+        SetAxisSnapModeRequest set_axis_snap_mode = 13;
+        SetAxisSnapThresholdRequest set_axis_snap_threshold = 14;
+        SetAxisSnapTimeoutRequest set_axis_snap_timeout = 15;
     }
 }
 
@@ -164,6 +205,9 @@ message Response {
         SetTempLayerDeactivationDelayResponse set_temp_layer_deactivation_delay = 11;
         SetActiveLayersResponse set_active_layers = 12;
         GetLayerInfoResponse get_layer_info = 13;
+        SetAxisSnapModeResponse set_axis_snap_mode = 14;
+        SetAxisSnapThresholdResponse set_axis_snap_threshold = 15;
+        SetAxisSnapTimeoutResponse set_axis_snap_timeout = 16;
     }
 }
 
