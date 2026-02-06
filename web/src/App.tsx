@@ -455,7 +455,6 @@ export function InputProcessorManager() {
               setAxisSnapThreshold(proc.axisSnapThreshold);
               setAxisSnapTimeout(proc.axisSnapTimeoutMs);
             }
-            }
           }
         } catch (err) {
           console.error("Failed to decode notification:", err);
