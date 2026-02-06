@@ -106,6 +106,11 @@ export function InputProcessorManager() {
   // Active layers state
   const [activeLayers, setActiveLayers] = useState<number>(0);
 
+  // Axis snap state
+  const [axisSnapMode, setAxisSnapMode] = useState<number>(0);
+  const [axisSnapThreshold, setAxisSnapThreshold] = useState<number>(100);
+  const [axisSnapTimeout, setAxisSnapTimeout] = useState<number>(1000);
+
   const subsystem = useMemo(
     () => zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -297,6 +302,48 @@ export function InputProcessorManager() {
         return;
       }
 
+      // Set axis snap mode
+      const axisSnapModeRequest = Request.create({
+        setAxisSnapMode: {
+          id: selectedProcessorId,
+          mode: axisSnapMode,
+        },
+      });
+      const axisSnapModeResp = await callRPC(axisSnapModeRequest);
+      if (axisSnapModeResp?.error) {
+        setError(axisSnapModeResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Set axis snap threshold
+      const axisSnapThresholdRequest = Request.create({
+        setAxisSnapThreshold: {
+          id: selectedProcessorId,
+          threshold: axisSnapThreshold,
+        },
+      });
+      const axisSnapThresholdResp = await callRPC(axisSnapThresholdRequest);
+      if (axisSnapThresholdResp?.error) {
+        setError(axisSnapThresholdResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Set axis snap timeout
+      const axisSnapTimeoutRequest = Request.create({
+        setAxisSnapTimeout: {
+          id: selectedProcessorId,
+          timeoutMs: axisSnapTimeout,
+        },
+      });
+      const axisSnapTimeoutResp = await callRPC(axisSnapTimeoutRequest);
+      if (axisSnapTimeoutResp?.error) {
+        setError(axisSnapTimeoutResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
       // Updates will come via notifications
     } catch (err) {
       setError(
@@ -316,6 +363,9 @@ export function InputProcessorManager() {
     tempLayerActivationDelay,
     tempLayerDeactivationDelay,
     activeLayers,
+    axisSnapMode,
+    axisSnapThreshold,
+    axisSnapTimeout,
   ]);
 
   const selectProcessor = useCallback(
@@ -331,6 +381,9 @@ export function InputProcessorManager() {
         setTempLayerActivationDelay(proc.tempLayerActivationDelayMs);
         setTempLayerDeactivationDelay(proc.tempLayerDeactivationDelayMs);
         setActiveLayers(proc.activeLayers);
+        setAxisSnapMode(proc.axisSnapMode);
+        setAxisSnapThreshold(proc.axisSnapThreshold);
+        setAxisSnapTimeout(proc.axisSnapTimeoutMs);
       }
     },
     [processors]
@@ -382,6 +435,9 @@ export function InputProcessorManager() {
               setTempLayerActivationDelay(proc.tempLayerActivationDelayMs);
               setTempLayerDeactivationDelay(proc.tempLayerDeactivationDelayMs);
               setActiveLayers(proc.activeLayers);
+              setAxisSnapMode(proc.axisSnapMode);
+              setAxisSnapThreshold(proc.axisSnapThreshold);
+              setAxisSnapTimeout(proc.axisSnapTimeoutMs);
             }
 
             // If no processor is selected yet, select the first one
@@ -395,6 +451,10 @@ export function InputProcessorManager() {
               setTempLayerActivationDelay(proc.tempLayerActivationDelayMs);
               setTempLayerDeactivationDelay(proc.tempLayerDeactivationDelayMs);
               setActiveLayers(proc.activeLayers);
+              setAxisSnapMode(proc.axisSnapMode);
+              setAxisSnapThreshold(proc.axisSnapThreshold);
+              setAxisSnapTimeout(proc.axisSnapTimeoutMs);
+            }
             }
           }
         } catch (err) {
@@ -736,6 +796,89 @@ export function InputProcessorManager() {
               )}
             </div>
           </div>
+
+          <hr style={{ margin: "1.5rem 0", border: "1px solid #e0e0e0" }} />
+
+          <h3>Axis Snapping</h3>
+          <p style={{ fontSize: "0.9em", color: "#666", marginBottom: "1rem" }}>
+            Lock scrolling to a specific axis. Movement on the other axis is suppressed
+            unless it exceeds the threshold within the timeout window.
+          </p>
+
+          <div className="input-group">
+            <label htmlFor="axis-snap-mode">Snap Mode:</label>
+            <select
+              id="axis-snap-mode"
+              value={axisSnapMode}
+              onChange={(e) => setAxisSnapMode(parseInt(e.target.value) || 0)}
+              style={{ padding: "0.5rem", fontSize: "1rem" }}
+            >
+              <option value={0}>No Snap</option>
+              <option value={1}>Snap to X Axis</option>
+              <option value={2}>Snap to Y Axis</option>
+            </select>
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              Select which axis to lock movement to
+            </div>
+          </div>
+
+          {axisSnapMode !== 0 && (
+            <>
+              <div className="input-group">
+                <label htmlFor="axis-snap-threshold">Unlock Threshold:</label>
+                <input
+                  id="axis-snap-threshold"
+                  type="number"
+                  min="0"
+                  max="1000"
+                  step="10"
+                  value={axisSnapThreshold}
+                  onChange={(e) =>
+                    setAxisSnapThreshold(parseInt(e.target.value) || 0)
+                  }
+                />
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Cross-axis movement required to unlock snap (0-1000)
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="axis-snap-timeout">Timeout Window (ms):</label>
+                <input
+                  id="axis-snap-timeout"
+                  type="number"
+                  min="0"
+                  max="5000"
+                  step="100"
+                  value={axisSnapTimeout}
+                  onChange={(e) =>
+                    setAxisSnapTimeout(parseInt(e.target.value) || 0)
+                  }
+                />
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Time window for threshold check (0-5000ms)
+                </div>
+              </div>
+            </>
+          )}
 
           <button
             className="btn btn-primary"
