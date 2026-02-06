@@ -1,0 +1,35 @@
+# Copyright (c) 2026 The ZMK Contributors
+# SPDX-License-Identifier: MIT
+
+description: |
+  Behavior to temporarily enable axis snapping while a key is held.
+  Useful for locking movement to a specific axis during text selection.
+
+compatible: "zmk,behavior-input-processor-axis-snap"
+
+include: zero_param.yaml
+
+properties:
+  processor-name:
+    type: string
+    required: true
+    description: Name of the runtime input processor to modify
+
+  snap-mode:
+    type: int
+    description: |
+      Snap mode: 0 = none, 1 = snap to X axis, 2 = snap to Y axis
+    default: 0
+
+  threshold:
+    type: int
+    description: |
+      Threshold for unlocking snap. Cross-axis movement must exceed this value
+      to unlock the snap.
+    default: 100
+
+  timeout-ms:
+    type: int
+    description: |
+      Time window (in milliseconds) for checking if cross-axis movement exceeds threshold.
+    default: 1000
