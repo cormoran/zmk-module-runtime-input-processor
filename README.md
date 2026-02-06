@@ -298,17 +298,24 @@ The axis snapping feature locks scrolling to a specific axis (X or Y), preventin
 **Configuration via Device Tree:**
 
 ```dts
+#include <dt-bindings/zmk/input_processor.h>
+
 scroll_runtime_input_processor: scroll_runtime_input_processor {
     compatible = "zmk,input-processor-runtime";
     processor-label = "scroll";
     // ... basic config ...
 
     // Lock to Y axis for vertical scrolling only
-    axis-snap-mode = <2>;  // 0=none, 1=X, 2=Y
+    axis-snap-mode = <AXIS_SNAP_MODE_Y>;
     axis-snap-threshold = <100>;  // Unlock if cross-axis movement > 100
-    axis-snap-timeout-ms = <1000>;  // Within 1 second window
+    axis-snap-timeout-ms = <1000>;  // Decay period
 };
 ```
+
+Available axis snap mode constants:
+- `AXIS_SNAP_MODE_NONE` (0): No snapping
+- `AXIS_SNAP_MODE_X` (1): Snap to X axis (horizontal only)
+- `AXIS_SNAP_MODE_Y` (2): Snap to Y axis (vertical only)
 
 **Configuration via Web UI:**
 
@@ -343,14 +350,15 @@ You can temporarily enable axis snapping while holding a key using binding param
 
 ```dts
 #include <behaviors/runtime-input-processor.dtsi>
+#include <dt-bindings/zmk/input_processor.h>
 
 / {
     keymap {
         compatible = "zmk,keymap";
         default_layer {
             bindings = <
-                &ysnap 2 100   // Hold for Y-axis snap (mode=2, threshold=100)
-                &xsnap 1 50    // Hold for X-axis snap (mode=1, threshold=50)
+                &ysnap AXIS_SNAP_MODE_Y 100   // Hold for Y-axis snap (threshold=100)
+                &xsnap AXIS_SNAP_MODE_X 50    // Hold for X-axis snap (threshold=50)
                 // ... other keys
             >;
         };
@@ -359,8 +367,15 @@ You can temporarily enable axis snapping while holding a key using binding param
 ```
 
 The behavior takes two parameters:
-- **param1**: Snap mode (0=none, 1=X, 2=Y)
+- **param1**: Snap mode (use constants: `AXIS_SNAP_MODE_NONE`, `AXIS_SNAP_MODE_X`, `AXIS_SNAP_MODE_Y`)
 - **param2**: Threshold for unlocking snap
+
+You can also configure the timeout in the behavior definition:
+```dts
+&ysnap {
+    timeout-ms = <500>;  // Custom timeout (default: 1000ms)
+};
+```
 
 When you press and hold the snap behavior key:
 1. Current snap settings are saved

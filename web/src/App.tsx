@@ -16,6 +16,7 @@ import {
   Response,
   InputProcessorInfo,
   Notification,
+  AxisSnapMode,
 } from "./proto/cormoran/rip/custom";
 
 // Custom subsystem identifier - must match firmware registration
@@ -107,7 +108,9 @@ export function InputProcessorManager() {
   const [activeLayers, setActiveLayers] = useState<number>(0);
 
   // Axis snap state
-  const [axisSnapMode, setAxisSnapMode] = useState<number>(0);
+  const [axisSnapMode, setAxisSnapMode] = useState<AxisSnapMode>(
+    AxisSnapMode.AXIS_SNAP_MODE_NONE
+  );
   const [axisSnapThreshold, setAxisSnapThreshold] = useState<number>(100);
   const [axisSnapTimeout, setAxisSnapTimeout] = useState<number>(1000);
 
@@ -810,12 +813,18 @@ export function InputProcessorManager() {
             <select
               id="axis-snap-mode"
               value={axisSnapMode}
-              onChange={(e) => setAxisSnapMode(parseInt(e.target.value) || 0)}
+              onChange={(e) =>
+                setAxisSnapMode(parseInt(e.target.value) as AxisSnapMode)
+              }
               style={{ padding: "0.5rem", fontSize: "1rem" }}
             >
-              <option value={0}>No Snap</option>
-              <option value={1}>Snap to X Axis</option>
-              <option value={2}>Snap to Y Axis</option>
+              <option value={AxisSnapMode.AXIS_SNAP_MODE_NONE}>No Snap</option>
+              <option value={AxisSnapMode.AXIS_SNAP_MODE_X}>
+                Snap to X Axis
+              </option>
+              <option value={AxisSnapMode.AXIS_SNAP_MODE_Y}>
+                Snap to Y Axis
+              </option>
             </select>
             <div
               style={{
@@ -828,7 +837,7 @@ export function InputProcessorManager() {
             </div>
           </div>
 
-          {axisSnapMode !== 0 && (
+          {axisSnapMode !== AxisSnapMode.AXIS_SNAP_MODE_NONE && (
             <>
               <div className="input-group">
                 <label htmlFor="axis-snap-threshold">Unlock Threshold:</label>

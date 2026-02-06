@@ -16,6 +16,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 struct behavior_input_processor_axis_snap_config {
     const char *processor_name;
+    uint16_t timeout_ms;
 };
 
 struct behavior_input_processor_axis_snap_data {
@@ -52,8 +53,8 @@ static int on_keymap_binding_pressed(struct zmk_behavior_binding *binding,
     // Get snap parameters from binding (param1 = mode, param2 = threshold)
     uint8_t snap_mode = binding->param1;
     uint16_t threshold = binding->param2;
-    // Default timeout is 1000ms (can be made configurable if needed)
-    uint16_t timeout_ms = 1000;
+    // Get timeout from DTS config
+    uint16_t timeout_ms = cfg->timeout_ms;
 
     // Apply temporary axis snap configuration (non-persistent)
     int ret = zmk_input_processor_runtime_set_axis_snap(data->processor,
@@ -103,6 +104,7 @@ static const struct behavior_driver_api behavior_input_processor_axis_snap_drive
     static const struct behavior_input_processor_axis_snap_config                                \
         behavior_input_processor_axis_snap_config_##n = {                                        \
             .processor_name = DT_INST_PROP(n, processor_name),                                   \
+            .timeout_ms = DT_INST_PROP_OR(n, timeout_ms, 1000),                                  \
         };                                                                                       \
     BEHAVIOR_DT_INST_DEFINE(n, behavior_input_processor_axis_snap_init, NULL,                    \
                             &behavior_input_processor_axis_snap_data_##n,                        \
