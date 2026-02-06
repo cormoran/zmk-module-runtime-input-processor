@@ -8,6 +8,7 @@ This ZMK module provides runtime configurable input processors for pointing devi
 - **Web Interface**: Configure settings through a browser-based UI
 - **Scaling Support**: Configure speed multipliers (e.g., x2 faster, x0.5 slower)
 - **Rotation Support**: Apply rotation transformations in degrees (fully implemented with paired X/Y handling)
+- **Axis Snapping**: Lock scrolling to X or Y axis with threshold-based unlock
 - **Persistent Settings**: Settings saved to non-volatile storage
 - **Multiple Processors**: Support for multiple input processors with individual configuration
 - **Short Names**: Processor names limited to 8 characters for BLE efficiency
@@ -289,6 +290,84 @@ The web interface provides two ways to configure active layers:
 - If at least one of the specified layers is active, the processor works normally
 - If none of the specified layers are active, the processor skips processing (no transformation applied)
 - This allows you to have different pointer speeds or behaviors on different layers
+
+### Axis Snapping
+
+The axis snapping feature locks scrolling to a specific axis (X or Y), preventing unwanted diagonal scrolling. Movement on the locked axis is suppressed unless it exceeds a configurable threshold within a timeout window.
+
+**Configuration via Device Tree:**
+
+```dts
+scroll_runtime_input_processor: scroll_runtime_input_processor {
+    compatible = "zmk,input-processor-runtime";
+    processor-label = "scroll";
+    // ... basic config ...
+
+    // Lock to Y axis for vertical scrolling only
+    axis-snap-mode = <2>;  // 0=none, 1=X, 2=Y
+    axis-snap-threshold = <100>;  // Unlock if cross-axis movement > 100
+    axis-snap-timeout-ms = <1000>;  // Within 1 second window
+};
+```
+
+**Configuration via Web UI:**
+
+The web interface provides controls for axis snapping:
+
+1. **Snap Mode**: Select no-snap, snap to X axis, or snap to Y axis
+2. **Unlock Threshold**: Set how much cross-axis movement is needed to unlock the snap
+3. **Timeout Window**: Set the time window for checking the threshold
+
+**Snap Modes:**
+
+- **No Snap (0)**: Normal operation, no axis locking
+- **Snap to X Axis (1)**: Only horizontal movement, vertical suppressed unless threshold exceeded
+- **Snap to Y Axis (2)**: Only vertical movement, horizontal suppressed unless threshold exceeded
+
+**Behavior:**
+
+- When snap is enabled, movement on the locked axis proceeds normally
+- Movement on the cross-axis is accumulated but suppressed (value set to 0)
+- If accumulated cross-axis movement exceeds the threshold within the timeout window, the snap lock is released
+- If the timeout expires without exceeding the threshold, the accumulated movement is reset
+
+**Example Use Cases:**
+
+- **Wheel Scroll**: Set `axis-snap-mode = <2>` on scroll processor to ensure wheel only scrolls vertically
+- **Text Selection**: Use the temporary snap behavior (`&ysnap`) to lock Y-axis while selecting text with mouse
+
+**Temporary Snap Behavior:**
+
+You can temporarily enable axis snapping while holding a key:
+
+```dts
+#include <behaviors/runtime-input-processor.dtsi>
+
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+        default_layer {
+            bindings = <
+                &ysnap  // Hold for Y-axis snap (vertical only)
+                &xsnap  // Hold for X-axis snap (horizontal only)
+                // ... other keys
+            >;
+        };
+    };
+};
+
+// Customize snap behaviors
+&ysnap {
+    snap-mode = <2>;  // Y axis
+    threshold = <50>;  // Lower threshold for tighter control
+    timeout-ms = <500>;
+}
+```
+
+When you press and hold the snap behavior key:
+1. Current snap settings are saved
+2. Temporary snap settings are applied
+3. When you release the key, original settings are restored
 
 ## Development Guide
 
