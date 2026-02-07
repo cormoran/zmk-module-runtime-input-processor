@@ -297,7 +297,7 @@ The axis snapping feature locks scrolling to a specific axis (X or Y), preventin
 **Configuration via Device Tree:**
 
 ```dts
-#include <dt-bindings/zmk/input_processor.h>
+#include <dt-bindings/zmk/runtime_input_processor.h>
 
 scroll_runtime_input_processor: scroll_runtime_input_processor {
     compatible = "zmk,input-processor-runtime";
@@ -350,7 +350,7 @@ You can temporarily enable axis snapping while holding a key using binding param
 
 ```dts
 #include <behaviors/runtime-input-processor.dtsi>
-#include <dt-bindings/zmk/input_processor.h>
+#include <dt-bindings/zmk/runtime_input_processor.h>
 
 / {
     keymap {
