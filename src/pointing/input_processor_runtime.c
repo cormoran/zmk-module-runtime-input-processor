@@ -869,7 +869,7 @@ int zmk_input_processor_runtime_get_config(
                         (runtime_temp_layer_keep_keycodes_##n), (NULL)),                                 \
         .initial_temp_layer_enabled =                                                                    \
             DT_INST_NODE_HAS_PROP(n, temp_layer_enabled),                                                \
-        .initial_temp_layer_layer = DT_INST_PROP_OR(n, temp_layer_layer, 0),                             \
+        .initial_temp_layer_layer = DT_INST_PROP_OR(n, temp_layer, 0),                                   \
         .initial_temp_layer_activation_delay_ms =                                                        \
             DT_INST_PROP_OR(n, temp_layer_activation_delay_ms, 100),                                     \
         .initial_temp_layer_deactivation_delay_ms =                                                      \
