@@ -114,6 +114,10 @@ export function InputProcessorManager() {
   const [axisSnapThreshold, setAxisSnapThreshold] = useState<number>(100);
   const [axisSnapTimeout, setAxisSnapTimeout] = useState<number>(1000);
 
+  // Axis invert state
+  const [xInvert, setXInvert] = useState<boolean>(false);
+  const [yInvert, setYInvert] = useState<boolean>(false);
+
   const subsystem = useMemo(
     () => zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -347,6 +351,34 @@ export function InputProcessorManager() {
         return;
       }
 
+      // Set X invert
+      const xInvertRequest = Request.create({
+        setXInvert: {
+          id: selectedProcessorId,
+          invert: xInvert,
+        },
+      });
+      const xInvertResp = await callRPC(xInvertRequest);
+      if (xInvertResp?.error) {
+        setError(xInvertResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Set Y invert
+      const yInvertRequest = Request.create({
+        setYInvert: {
+          id: selectedProcessorId,
+          invert: yInvert,
+        },
+      });
+      const yInvertResp = await callRPC(yInvertRequest);
+      if (yInvertResp?.error) {
+        setError(yInvertResp.error.message);
+        setIsLoading(false);
+        return;
+      }
+
       // Updates will come via notifications
     } catch (err) {
       setError(
@@ -369,6 +401,8 @@ export function InputProcessorManager() {
     axisSnapMode,
     axisSnapThreshold,
     axisSnapTimeout,
+    xInvert,
+    yInvert,
   ]);
 
   const selectProcessor = useCallback(
@@ -387,6 +421,8 @@ export function InputProcessorManager() {
         setAxisSnapMode(proc.axisSnapMode);
         setAxisSnapThreshold(proc.axisSnapThreshold);
         setAxisSnapTimeout(proc.axisSnapTimeoutMs);
+        setXInvert(proc.xInvert);
+        setYInvert(proc.yInvert);
       }
     },
     [processors]
@@ -441,6 +477,8 @@ export function InputProcessorManager() {
               setAxisSnapMode(proc.axisSnapMode);
               setAxisSnapThreshold(proc.axisSnapThreshold);
               setAxisSnapTimeout(proc.axisSnapTimeoutMs);
+              setXInvert(proc.xInvert);
+              setYInvert(proc.yInvert);
             }
 
             // If no processor is selected yet, select the first one
@@ -457,6 +495,8 @@ export function InputProcessorManager() {
               setAxisSnapMode(proc.axisSnapMode);
               setAxisSnapThreshold(proc.axisSnapThreshold);
               setAxisSnapTimeout(proc.axisSnapTimeoutMs);
+              setXInvert(proc.xInvert);
+              setYInvert(proc.yInvert);
             }
           }
         } catch (err) {
@@ -888,6 +928,59 @@ export function InputProcessorManager() {
               </div>
             </>
           )}
+
+          <hr style={{ margin: "1.5rem 0", border: "1px solid #e0e0e0" }} />
+
+          <h3>Axis Inversion</h3>
+          <p style={{ fontSize: "0.9em", color: "#666", marginBottom: "1rem" }}>
+            Invert axis values to reverse input direction (e.g., 2 becomes -2)
+          </p>
+
+          <div className="input-group">
+            <label htmlFor="x-invert">
+              <input
+                id="x-invert"
+                type="checkbox"
+                checked={xInvert}
+                onChange={(e) => setXInvert(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Invert X Axis
+            </label>
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+                marginLeft: "1.5rem",
+              }}
+            >
+              Reverse horizontal input direction
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="y-invert">
+              <input
+                id="y-invert"
+                type="checkbox"
+                checked={yInvert}
+                onChange={(e) => setYInvert(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Invert Y Axis
+            </label>
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+                marginLeft: "1.5rem",
+              }}
+            >
+              Reverse vertical input direction
+            </div>
+          </div>
 
           <button
             className="btn btn-primary"
