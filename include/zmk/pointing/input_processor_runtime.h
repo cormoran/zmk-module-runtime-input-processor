@@ -36,6 +36,9 @@ struct zmk_input_processor_runtime_config {
     uint8_t axis_snap_mode;  // zmk_input_processor_axis_snap_mode
     uint16_t axis_snap_threshold;  // Threshold for unsnapping
     uint16_t axis_snap_timeout_ms;  // Time window for checking threshold
+    // Axis reverse settings
+    bool x_invert;  // Whether to invert X axis
+    bool y_invert;  // Whether to invert Y axis
 };
 
 /**
@@ -259,3 +262,27 @@ int zmk_input_processor_runtime_set_axis_snap(const struct device *dev,
                                                uint16_t threshold,
                                                uint16_t timeout_ms,
                                                bool persistent);
+
+/**
+ * @brief Set X axis inversion
+ *
+ * @param dev Pointer to the device structure
+ * @param invert If true, invert X axis values (positive becomes negative and vice versa)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_x_invert(const struct device *dev,
+                                              bool invert,
+                                              bool persistent);
+
+/**
+ * @brief Set Y axis inversion
+ *
+ * @param dev Pointer to the device structure
+ * @param invert If true, invert Y axis values (positive becomes negative and vice versa)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_y_invert(const struct device *dev,
+                                              bool invert,
+                                              bool persistent);

@@ -28,6 +28,9 @@ message InputProcessorInfo {
     AxisSnapMode axis_snap_mode = 11;  // Snap mode
     uint32 axis_snap_threshold = 12;  // Threshold for unsnapping
     uint32 axis_snap_timeout_ms = 13;  // Time window for threshold check (ms)
+    // Axis invert settings
+    bool x_invert = 14;  // Whether to invert X axis
+    bool y_invert = 15;  // Whether to invert Y axis
 }
 
 message ListInputProcessorsRequest {
@@ -166,6 +169,24 @@ message SetAxisSnapTimeoutResponse {
     // Empty - use notification to report changes
 }
 
+message SetXInvertRequest {
+    uint32 id    = 1;  // ID of the input processor to update
+    bool invert  = 2;  // Whether to invert X axis
+}
+
+message SetXInvertResponse {
+    // Empty - use notification to report changes
+}
+
+message SetYInvertRequest {
+    uint32 id    = 1;  // ID of the input processor to update
+    bool invert  = 2;  // Whether to invert Y axis
+}
+
+message SetYInvertResponse {
+    // Empty - use notification to report changes
+}
+
 message Request {
     oneof request_type {
         ListInputProcessorsRequest list_input_processors = 1;
@@ -183,6 +204,8 @@ message Request {
         SetAxisSnapModeRequest set_axis_snap_mode = 13;
         SetAxisSnapThresholdRequest set_axis_snap_threshold = 14;
         SetAxisSnapTimeoutRequest set_axis_snap_timeout = 15;
+        SetXInvertRequest set_x_invert = 16;
+        SetYInvertRequest set_y_invert = 17;
     }
 }
 
@@ -208,6 +231,8 @@ message Response {
         SetAxisSnapModeResponse set_axis_snap_mode = 14;
         SetAxisSnapThresholdResponse set_axis_snap_threshold = 15;
         SetAxisSnapTimeoutResponse set_axis_snap_timeout = 16;
+        SetXInvertResponse set_x_invert = 17;
+        SetYInvertResponse set_y_invert = 18;
     }
 }
 

@@ -116,3 +116,11 @@ properties:
     description: |
       Time window (in milliseconds) for checking if cross-axis movement exceeds threshold.
       If threshold is not exceeded within this time, the snap lock window resets.
+
+  x-invert:
+    type: boolean
+    description: If present, invert X axis values (positive becomes negative and vice versa)
+
+  y-invert:
+    type: boolean
+    description: If present, invert Y axis values (positive becomes negative and vice versa)
