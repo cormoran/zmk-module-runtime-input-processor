@@ -8,6 +8,7 @@ This ZMK module provides runtime configurable input processors for pointing devi
 - **Web Interface**: Configure settings through a browser-based UI
 - **Scaling Support**: Configure speed multipliers (e.g., x2 faster, x0.5 slower)
 - **Rotation Support**: Apply rotation transformations in degrees (fully implemented with paired X/Y handling)
+- **Axis Reversing**: Invert X and/or Y axis independently to reverse input direction
 - **Axis Snapping**: Lock scrolling to X or Y axis with threshold-based unlock
 - **Temp-Layer Layer**: Automatically activate a layer when using pointing device, deactivate on key press or timeout
 - **Active Layers**: Specify which layers the processor should be active on using a bitmask

@@ -85,6 +85,7 @@ export function InputProcessorManager() {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Layer information
   const [layers, setLayers] = useState<Array<{ index: number; name: string }>>(
@@ -117,6 +118,9 @@ export function InputProcessorManager() {
   // Code mapping state
   const [xyToScrollEnabled, setXyToScrollEnabled] = useState<boolean>(false);
   const [xySwapEnabled, setXySwapEnabled] = useState<boolean>(false);
+  // Axis invert state
+  const [xInvert, setXInvert] = useState<boolean>(false);
+  const [yInvert, setYInvert] = useState<boolean>(false);
 
   const subsystem = useMemo(
     () => zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER),
@@ -192,191 +196,245 @@ export function InputProcessorManager() {
   const updateProcessor = useCallback(async () => {
     if (selectedProcessorId === null) return;
 
+    const currentProcessor = processors.find(
+      (p) => p.id === selectedProcessorId
+    );
+    if (!currentProcessor) return;
+
     setIsLoading(true);
     setError(null);
+    setIsUpdating(true);
 
     try {
-      // Send separate requests for each parameter
-      // Set scale multiplier
-      const mulRequest = Request.create({
-        setScaleMultiplier: {
-          id: selectedProcessorId,
-          value: scaleMultiplier,
-        },
-      });
-      const mulResp = await callRPC(mulRequest);
-      if (mulResp?.error) {
-        setError(mulResp.error.message);
-        setIsLoading(false);
-        return;
+      // Only send requests for fields that have actually changed
+      if (currentProcessor.scaleMultiplier !== scaleMultiplier) {
+        const mulRequest = Request.create({
+          setScaleMultiplier: {
+            id: selectedProcessorId,
+            value: scaleMultiplier,
+          },
+        });
+        const mulResp = await callRPC(mulRequest);
+        if (mulResp?.error) {
+          setError(mulResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set scale divisor
-      const divRequest = Request.create({
-        setScaleDivisor: {
-          id: selectedProcessorId,
-          value: scaleDivisor,
-        },
-      });
-      const divResp = await callRPC(divRequest);
-      if (divResp?.error) {
-        setError(divResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.scaleDivisor !== scaleDivisor) {
+        const divRequest = Request.create({
+          setScaleDivisor: {
+            id: selectedProcessorId,
+            value: scaleDivisor,
+          },
+        });
+        const divResp = await callRPC(divRequest);
+        if (divResp?.error) {
+          setError(divResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set rotation
-      const rotRequest = Request.create({
-        setRotation: {
-          id: selectedProcessorId,
-          value: rotationDegrees,
-        },
-      });
-      const rotResp = await callRPC(rotRequest);
-      if (rotResp?.error) {
-        setError(rotResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.rotationDegrees !== rotationDegrees) {
+        const rotRequest = Request.create({
+          setRotation: {
+            id: selectedProcessorId,
+            value: rotationDegrees,
+          },
+        });
+        const rotResp = await callRPC(rotRequest);
+        if (rotResp?.error) {
+          setError(rotResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set temp-layer enabled
-      const enabledRequest = Request.create({
-        setTempLayerEnabled: {
-          id: selectedProcessorId,
-          enabled: tempLayerEnabled,
-        },
-      });
-      const enabledResp = await callRPC(enabledRequest);
-      if (enabledResp?.error) {
-        setError(enabledResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.tempLayerEnabled !== tempLayerEnabled) {
+        const enabledRequest = Request.create({
+          setTempLayerEnabled: {
+            id: selectedProcessorId,
+            enabled: tempLayerEnabled,
+          },
+        });
+        const enabledResp = await callRPC(enabledRequest);
+        if (enabledResp?.error) {
+          setError(enabledResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set temp-layer layer
-      const layerRequest = Request.create({
-        setTempLayerLayer: {
-          id: selectedProcessorId,
-          layer: tempLayerLayer,
-        },
-      });
-      const layerResp = await callRPC(layerRequest);
-      if (layerResp?.error) {
-        setError(layerResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.tempLayerLayer !== tempLayerLayer) {
+        const layerRequest = Request.create({
+          setTempLayerLayer: {
+            id: selectedProcessorId,
+            layer: tempLayerLayer,
+          },
+        });
+        const layerResp = await callRPC(layerRequest);
+        if (layerResp?.error) {
+          setError(layerResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set temp-layer activation delay
-      const actDelayRequest = Request.create({
-        setTempLayerActivationDelay: {
-          id: selectedProcessorId,
-          activationDelayMs: tempLayerActivationDelay,
-        },
-      });
-      const actDelayResp = await callRPC(actDelayRequest);
-      if (actDelayResp?.error) {
-        setError(actDelayResp.error.message);
-        setIsLoading(false);
-        return;
+      if (
+        currentProcessor.tempLayerActivationDelayMs !== tempLayerActivationDelay
+      ) {
+        const actDelayRequest = Request.create({
+          setTempLayerActivationDelay: {
+            id: selectedProcessorId,
+            activationDelayMs: tempLayerActivationDelay,
+          },
+        });
+        const actDelayResp = await callRPC(actDelayRequest);
+        if (actDelayResp?.error) {
+          setError(actDelayResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set temp-layer deactivation delay
-      const deactDelayRequest = Request.create({
-        setTempLayerDeactivationDelay: {
-          id: selectedProcessorId,
-          deactivationDelayMs: tempLayerDeactivationDelay,
-        },
-      });
-      const deactDelayResp = await callRPC(deactDelayRequest);
-      if (deactDelayResp?.error) {
-        setError(deactDelayResp.error.message);
-        setIsLoading(false);
-        return;
+      if (
+        currentProcessor.tempLayerDeactivationDelayMs !==
+        tempLayerDeactivationDelay
+      ) {
+        const deactDelayRequest = Request.create({
+          setTempLayerDeactivationDelay: {
+            id: selectedProcessorId,
+            deactivationDelayMs: tempLayerDeactivationDelay,
+          },
+        });
+        const deactDelayResp = await callRPC(deactDelayRequest);
+        if (deactDelayResp?.error) {
+          setError(deactDelayResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set active layers
-      const activeLayersRequest = Request.create({
-        setActiveLayers: {
-          id: selectedProcessorId,
-          layers: activeLayers,
-        },
-      });
-      const activeLayersResp = await callRPC(activeLayersRequest);
-      if (activeLayersResp?.error) {
-        setError(activeLayersResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.activeLayers !== activeLayers) {
+        const activeLayersRequest = Request.create({
+          setActiveLayers: {
+            id: selectedProcessorId,
+            layers: activeLayers,
+          },
+        });
+        const activeLayersResp = await callRPC(activeLayersRequest);
+        if (activeLayersResp?.error) {
+          setError(activeLayersResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set axis snap mode
-      const axisSnapModeRequest = Request.create({
-        setAxisSnapMode: {
-          id: selectedProcessorId,
-          mode: axisSnapMode,
-        },
-      });
-      const axisSnapModeResp = await callRPC(axisSnapModeRequest);
-      if (axisSnapModeResp?.error) {
-        setError(axisSnapModeResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.axisSnapMode !== axisSnapMode) {
+        const axisSnapModeRequest = Request.create({
+          setAxisSnapMode: {
+            id: selectedProcessorId,
+            mode: axisSnapMode,
+          },
+        });
+        const axisSnapModeResp = await callRPC(axisSnapModeRequest);
+        if (axisSnapModeResp?.error) {
+          setError(axisSnapModeResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set axis snap threshold
-      const axisSnapThresholdRequest = Request.create({
-        setAxisSnapThreshold: {
-          id: selectedProcessorId,
-          threshold: axisSnapThreshold,
-        },
-      });
-      const axisSnapThresholdResp = await callRPC(axisSnapThresholdRequest);
-      if (axisSnapThresholdResp?.error) {
-        setError(axisSnapThresholdResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.axisSnapThreshold !== axisSnapThreshold) {
+        const axisSnapThresholdRequest = Request.create({
+          setAxisSnapThreshold: {
+            id: selectedProcessorId,
+            threshold: axisSnapThreshold,
+          },
+        });
+        const axisSnapThresholdResp = await callRPC(axisSnapThresholdRequest);
+        if (axisSnapThresholdResp?.error) {
+          setError(axisSnapThresholdResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set axis snap timeout
-      const axisSnapTimeoutRequest = Request.create({
-        setAxisSnapTimeout: {
-          id: selectedProcessorId,
-          timeoutMs: axisSnapTimeout,
-        },
-      });
-      const axisSnapTimeoutResp = await callRPC(axisSnapTimeoutRequest);
-      if (axisSnapTimeoutResp?.error) {
-        setError(axisSnapTimeoutResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.axisSnapTimeoutMs !== axisSnapTimeout) {
+        const axisSnapTimeoutRequest = Request.create({
+          setAxisSnapTimeout: {
+            id: selectedProcessorId,
+            timeoutMs: axisSnapTimeout,
+          },
+        });
+        const axisSnapTimeoutResp = await callRPC(axisSnapTimeoutRequest);
+        if (axisSnapTimeoutResp?.error) {
+          setError(axisSnapTimeoutResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set XY-to-scroll enabled
-      const xyToScrollRequest = Request.create({
-        setXyToScrollEnabled: {
-          id: selectedProcessorId,
-          enabled: xyToScrollEnabled,
-        },
-      });
-      const xyToScrollResp = await callRPC(xyToScrollRequest);
-      if (xyToScrollResp?.error) {
-        setError(xyToScrollResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.xyToScrollEnabled !== xyToScrollEnabled) {
+        const xyToScrollRequest = Request.create({
+          setXyToScrollEnabled: {
+            id: selectedProcessorId,
+            enabled: xyToScrollEnabled,
+          },
+        });
+        const xyToScrollResp = await callRPC(xyToScrollRequest);
+        if (xyToScrollResp?.error) {
+          setError(xyToScrollResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Set XY-swap enabled
-      const xySwapRequest = Request.create({
-        setXySwapEnabled: {
-          id: selectedProcessorId,
-          enabled: xySwapEnabled,
-        },
-      });
-      const xySwapResp = await callRPC(xySwapRequest);
-      if (xySwapResp?.error) {
-        setError(xySwapResp.error.message);
-        setIsLoading(false);
-        return;
+      if (currentProcessor.xInvert !== xInvert) {
+        const xInvertRequest = Request.create({
+          setXInvert: {
+            id: selectedProcessorId,
+            invert: xInvert,
+          },
+        });
+        const xInvertResp = await callRPC(xInvertRequest);
+        if (xInvertResp?.error) {
+          setError(xInvertResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      if (currentProcessor.xySwapEnabled !== xySwapEnabled) {
+        const xySwapRequest = Request.create({
+          setXySwapEnabled: {
+            id: selectedProcessorId,
+            enabled: xySwapEnabled,
+          },
+        });
+        const xySwapResp = await callRPC(xySwapRequest);
+        if (xySwapResp?.error) {
+          setError(xySwapResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      if (currentProcessor.yInvert !== yInvert) {
+        const yInvertRequest = Request.create({
+          setYInvert: {
+            id: selectedProcessorId,
+            invert: yInvert,
+          },
+        });
+        const yInvertResp = await callRPC(yInvertRequest);
+        if (yInvertResp?.error) {
+          setError(yInvertResp.error.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
       // Updates will come via notifications
@@ -386,9 +444,11 @@ export function InputProcessorManager() {
       );
     } finally {
       setIsLoading(false);
+      setIsUpdating(false);
     }
   }, [
     callRPC,
+    processors,
     selectedProcessorId,
     scaleMultiplier,
     scaleDivisor,
@@ -403,6 +463,8 @@ export function InputProcessorManager() {
     axisSnapTimeout,
     xyToScrollEnabled,
     xySwapEnabled,
+    xInvert,
+    yInvert,
   ]);
 
   const selectProcessor = useCallback(
@@ -423,6 +485,8 @@ export function InputProcessorManager() {
         setAxisSnapTimeout(proc.axisSnapTimeoutMs);
         setXyToScrollEnabled(proc.xyToScrollEnabled);
         setXySwapEnabled(proc.xySwapEnabled);
+        setXInvert(proc.xInvert);
+        setYInvert(proc.yInvert);
       }
     },
     [processors]
@@ -465,7 +529,8 @@ export function InputProcessorManager() {
             });
 
             // If this is the currently selected processor, update form values
-            if (selectedProcessorId === proc.id) {
+            // Skip updates if we're currently updating to prevent overwriting user changes
+            if (selectedProcessorId === proc.id && !isUpdating) {
               setScaleMultiplier(proc.scaleMultiplier);
               setScaleDivisor(proc.scaleDivisor);
               setRotationDegrees(proc.rotationDegrees);
@@ -479,6 +544,8 @@ export function InputProcessorManager() {
               setAxisSnapTimeout(proc.axisSnapTimeoutMs);
               setXyToScrollEnabled(proc.xyToScrollEnabled);
               setXySwapEnabled(proc.xySwapEnabled);
+              setXInvert(proc.xInvert);
+              setYInvert(proc.yInvert);
             }
 
             // If no processor is selected yet, select the first one
@@ -497,6 +564,8 @@ export function InputProcessorManager() {
               setAxisSnapTimeout(proc.axisSnapTimeoutMs);
               setXyToScrollEnabled(proc.xyToScrollEnabled);
               setXySwapEnabled(proc.xySwapEnabled);
+              setXInvert(proc.xInvert);
+              setYInvert(proc.yInvert);
             }
           }
         } catch (err) {
@@ -506,7 +575,7 @@ export function InputProcessorManager() {
     });
 
     return unsubscribe;
-  }, [zmkApp, subsystem, selectedProcessorId]);
+  }, [zmkApp, subsystem, selectedProcessorId, isUpdating]);
 
   if (!zmkApp) return null;
 
@@ -979,6 +1048,56 @@ export function InputProcessorManager() {
               }}
             >
               Swap X and Y axes (Note: XY-to-scroll takes precedence)
+            </div>
+          </div>
+          <h3>Axis Inversion</h3>
+          <p style={{ fontSize: "0.9em", color: "#666", marginBottom: "1rem" }}>
+            Invert axis values to reverse input direction (e.g., 2 becomes -2)
+          </p>
+
+          <div className="input-group">
+            <label htmlFor="x-invert">
+              <input
+                id="x-invert"
+                type="checkbox"
+                checked={xInvert}
+                onChange={(e) => setXInvert(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Invert X Axis
+            </label>
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+                marginLeft: "1.5rem",
+              }}
+            >
+              Reverse horizontal input direction
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="y-invert">
+              <input
+                id="y-invert"
+                type="checkbox"
+                checked={yInvert}
+                onChange={(e) => setYInvert(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Invert Y Axis
+            </label>
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+                marginLeft: "1.5rem",
+              }}
+            >
+              Reverse vertical input direction
             </div>
           </div>
 

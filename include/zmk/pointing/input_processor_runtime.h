@@ -39,6 +39,9 @@ struct zmk_input_processor_runtime_config {
     // Code mapping settings
     bool xy_to_scroll_enabled;  // Map X/Y to horizontal/vertical scroll
     bool xy_swap_enabled;  // Swap X and Y axes
+    // Axis reverse settings
+    bool x_invert;  // Whether to invert X axis
+    bool y_invert;  // Whether to invert Y axis
 };
 
 /**
@@ -290,3 +293,26 @@ int zmk_input_processor_runtime_set_xy_to_scroll_enabled(const struct device *de
 int zmk_input_processor_runtime_set_xy_swap_enabled(const struct device *dev,
                                                      bool enabled,
                                                      bool persistent);
+ 
+/**
+ *
+ * @param dev Pointer to the device structure
+ * @param invert If true, invert X axis values (positive becomes negative and vice versa)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_x_invert(const struct device *dev,
+                                              bool invert,
+                                              bool persistent);
+
+/**
+ * @brief Set Y axis inversion
+ *
+ * @param dev Pointer to the device structure
+ * @param invert If true, invert Y axis values (positive becomes negative and vice versa)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_y_invert(const struct device *dev,
+                                              bool invert,
+                                              bool persistent);

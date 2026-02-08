@@ -86,6 +86,12 @@ static int handle_set_xy_to_scroll_enabled(
 static int handle_set_xy_swap_enabled(
     const cormoran_rip_SetXySwapEnabledRequest *req,
     cormoran_rip_Response *resp);
+static int handle_set_x_invert(
+    const cormoran_rip_SetXInvertRequest *req,
+    cormoran_rip_Response *resp);
+static int handle_set_y_invert(
+    const cormoran_rip_SetYInvertRequest *req,
+    cormoran_rip_Response *resp);
 
 /**
  * Main request handler for the custom RPC subsystem.
@@ -178,6 +184,13 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         case cormoran_rip_Request_set_xy_swap_enabled_tag:
             rc = handle_set_xy_swap_enabled(
                 &req.request_type.set_xy_swap_enabled, resp);
+        case cormoran_rip_Request_set_x_invert_tag:
+            rc = handle_set_x_invert(
+                &req.request_type.set_x_invert, resp);
+            break;
+        case cormoran_rip_Request_set_y_invert_tag:
+            rc = handle_set_y_invert(
+                &req.request_type.set_y_invert, resp);
             break;
         default:
             LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -287,6 +300,11 @@ static int handle_get_input_processor(
     result.processor.temp_layer_deactivation_delay_ms =
         config.temp_layer_deactivation_delay_ms;
     result.processor.active_layers = config.active_layers;
+    result.processor.axis_snap_mode = (cormoran_rip_AxisSnapMode)config.axis_snap_mode;
+    result.processor.axis_snap_threshold = config.axis_snap_threshold;
+    result.processor.axis_snap_timeout_ms = config.axis_snap_timeout_ms;
+    result.processor.x_invert = config.x_invert;
+    result.processor.y_invert = config.y_invert;
 
     resp->which_response_type = cormoran_rip_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -688,6 +706,70 @@ static int handle_set_axis_snap_timeout(
     resp->response_type.set_axis_snap_timeout =
         (cormoran_rip_SetAxisSnapTimeoutResponse)
             cormoran_rip_SetAxisSnapTimeoutResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting X axis inversion
+ */
+static int handle_set_x_invert(
+    const cormoran_rip_SetXInvertRequest *req,
+    cormoran_rip_Response *resp) {
+    LOG_DBG("Setting X invert for id=%d to %s", req->id, req->invert ? "true" : "false");
+
+    const struct device *dev =
+        zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set X invert (persistent)
+    int ret = zmk_input_processor_runtime_set_x_invert(
+        dev, req->invert, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set X invert: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_x_invert_tag;
+    resp->response_type.set_x_invert =
+        (cormoran_rip_SetXInvertResponse)
+            cormoran_rip_SetXInvertResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting Y axis inversion
+ */
+static int handle_set_y_invert(
+    const cormoran_rip_SetYInvertRequest *req,
+    cormoran_rip_Response *resp) {
+    LOG_DBG("Setting Y invert for id=%d to %s", req->id, req->invert ? "true" : "false");
+
+    const struct device *dev =
+        zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set Y invert (persistent)
+    int ret = zmk_input_processor_runtime_set_y_invert(
+        dev, req->invert, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set Y invert: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_y_invert_tag;
+    resp->response_type.set_y_invert =
+        (cormoran_rip_SetYInvertResponse)
+            cormoran_rip_SetYInvertResponse_init_zero;
 
     return 0;
 }

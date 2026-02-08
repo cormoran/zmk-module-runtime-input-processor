@@ -31,6 +31,9 @@ message InputProcessorInfo {
     // Code mapping features
     bool xy_to_scroll_enabled = 14;  // Map X/Y to horizontal/vertical scroll
     bool xy_swap_enabled = 15;  // Swap X and Y axes
+    // Axis invert settings
+    bool x_invert = 16;  // Whether to invert X axis
+    bool y_invert = 17;  // Whether to invert Y axis
 }
 
 message ListInputProcessorsRequest {
@@ -184,6 +187,24 @@ message SetXyToScrollEnabledResponse {
 }
 
 message SetXySwapEnabledResponse {
+        // Empty - use notification to report changes
+}
+
+message SetXInvertRequest {
+    uint32 id    = 1;  // ID of the input processor to update
+    bool invert  = 2;  // Whether to invert X axis
+}
+
+message SetXInvertResponse {
+    // Empty - use notification to report changes
+}
+
+message SetYInvertRequest {
+    uint32 id    = 1;  // ID of the input processor to update
+    bool invert  = 2;  // Whether to invert Y axis
+}
+
+message SetYInvertResponse {
     // Empty - use notification to report changes
 }
 
@@ -206,6 +227,8 @@ message Request {
         SetAxisSnapTimeoutRequest set_axis_snap_timeout = 15;
         SetXyToScrollEnabledRequest set_xy_to_scroll_enabled = 16;
         SetXySwapEnabledRequest set_xy_swap_enabled = 17;
+        SetXInvertRequest set_x_invert = 18;
+        SetYInvertRequest set_y_invert = 19;
     }
 }
 
@@ -233,6 +256,8 @@ message Response {
         SetAxisSnapTimeoutResponse set_axis_snap_timeout = 16;
         SetXyToScrollEnabledResponse set_xy_to_scroll_enabled = 17;
         SetXySwapEnabledResponse set_xy_swap_enabled = 18;
+        SetXInvertResponse set_x_invert = 19;
+        SetYInvertResponse set_y_invert = 20;
     }
 }
 
