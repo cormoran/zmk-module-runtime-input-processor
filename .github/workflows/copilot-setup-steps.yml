@@ -34,9 +34,9 @@ jobs:
             cmake --version
             python3 --version
             dtc --version
-      - name: Install West
+      - name: Install West and pre-commit
         run: |
-            pip3 install --user -U west pyelftools grpcio-tools
+            pip3 install --user -U west pyelftools grpcio-tools pre-commit
             echo 'export PATH=~/.local/bin:"$PATH"' >> ~/.bashrc
             source ~/.bashrc
       - name: Cache Zephyr SDK
@@ -84,3 +84,5 @@ jobs:
       - name: Generate types from proto
         run: npm run generate
         working-directory: web
+      - name: Install pre-commit hooks
+        run: pre-commit install

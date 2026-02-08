@@ -3,4 +3,3 @@ manifest:
   self:
     import: west/west-dependency/west-dependency.yml
   # Please edit west/west-dependency/west-dependency.yml to change dependencies
-

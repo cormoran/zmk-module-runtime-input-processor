@@ -9,7 +9,7 @@
 #include <dt-bindings/zmk/keys.h>
 
 / {
-	
+
 	/omit-if-no-ref/
 	mouse_runtime_input_processor: mouse_runtime_input_processor {
 		compatible = "zmk,input-processor-runtime";
@@ -21,14 +21,14 @@
 		scale-divisor = <1>;
 		rotation-degrees = <0>;
 		track-remainders;
-		
+
 		temp-layer-transparent-behavior = <&trans>;
 		temp-layer-kp-behavior = <&kp>;
 		temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
-		
+
 		#input-processor-cells = <0>;
 	};
-	
+
 	/omit-if-no-ref/
 	scroll_runtime_input_processor: scroll_runtime_input_processor {
 		compatible = "zmk,input-processor-runtime";
@@ -41,11 +41,11 @@
 		scale-divisor = <60>;
 		rotation-degrees = <0>;
 		track-remainders;
-		
+
 		temp-layer-transparent-behavior = <&trans>;
 		temp-layer-kp-behavior = <&kp>;
 		temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
-		
+
 		#input-processor-cells = <0>;
 	};
 };

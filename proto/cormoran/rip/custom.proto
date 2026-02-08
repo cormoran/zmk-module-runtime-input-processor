@@ -4,36 +4,35 @@ package cormoran.rip;
 
 // Axis snap mode enum
 enum AxisSnapMode {
-    AXIS_SNAP_MODE_NONE = 0;  // No snapping
-    AXIS_SNAP_MODE_X = 1;     // Snap to X axis
-    AXIS_SNAP_MODE_Y = 2;     // Snap to Y axis
+    AXIS_SNAP_MODE_NONE = 0; // No snapping
+    AXIS_SNAP_MODE_X = 1;    // Snap to X axis
+    AXIS_SNAP_MODE_Y = 2;    // Snap to Y axis
 }
 
 // Runtime Input Processor Messages
 message InputProcessorInfo {
-    uint32 id               = 1;  // Processor ID (index in array)
-    string name             = 2;  // Short name (max 8 chars for BLE)
-    uint32 scale_multiplier = 3;  // Scaling multiplier
-    uint32 scale_divisor =
-        4;  // Scaling divisor (multiply by scale_multiplier/scale_divisor)
+    uint32 id = 1;               // Processor ID (index in array)
+    string name = 2;             // Short name (max 8 chars for BLE)
+    uint32 scale_multiplier = 3; // Scaling multiplier
+    uint32 scale_divisor = 4;    // Scaling divisor (multiply by scale_multiplier/scale_divisor)
     int32 rotation_degrees = 5;  // Rotation angle in degrees
     // Auto-mouse layer settings
-    bool temp_layer_enabled = 6;  // Whether temp-layer is enabled
-    uint32 temp_layer_layer = 7;  // Target layer ID for temp-layer
-    uint32 temp_layer_activation_delay_ms = 8;  // Delay before activating (ms)
-    uint32 temp_layer_deactivation_delay_ms = 9;  // Delay before deactivating (ms)
+    bool temp_layer_enabled = 6;                 // Whether temp-layer is enabled
+    uint32 temp_layer_layer = 7;                 // Target layer ID for temp-layer
+    uint32 temp_layer_activation_delay_ms = 8;   // Delay before activating (ms)
+    uint32 temp_layer_deactivation_delay_ms = 9; // Delay before deactivating (ms)
     // Active layers bitmask (0 = all layers)
-    uint32 active_layers = 10;  // Bitmask of layers where processor is active
+    uint32 active_layers = 10; // Bitmask of layers where processor is active
     // Axis snap settings
-    AxisSnapMode axis_snap_mode = 11;  // Snap mode
+    AxisSnapMode axis_snap_mode = 11; // Snap mode
     uint32 axis_snap_threshold = 12;  // Threshold for unsnapping
-    uint32 axis_snap_timeout_ms = 13;  // Time window for threshold check (ms)
+    uint32 axis_snap_timeout_ms = 13; // Time window for threshold check (ms)
     // Code mapping features
-    bool xy_to_scroll_enabled = 14;  // Map X/Y to horizontal/vertical scroll
-    bool xy_swap_enabled = 15;  // Swap X and Y axes
+    bool xy_to_scroll_enabled = 14; // Map X/Y to horizontal/vertical scroll
+    bool xy_swap_enabled = 15;      // Swap X and Y axes
     // Axis invert settings
-    bool x_invert = 16;  // Whether to invert X axis
-    bool y_invert = 17;  // Whether to invert Y axis
+    bool x_invert = 16; // Whether to invert X axis
+    bool y_invert = 17; // Whether to invert Y axis
 }
 
 message ListInputProcessorsRequest {
@@ -45,16 +44,14 @@ message ListInputProcessorsResponse {
 }
 
 message GetInputProcessorRequest {
-    uint32 id = 1;  // ID of the input processor
+    uint32 id = 1; // ID of the input processor
 }
 
-message GetInputProcessorResponse {
-    InputProcessorInfo processor = 1;
-}
+message GetInputProcessorResponse { InputProcessorInfo processor = 1; }
 
 message LayerInfo {
-    uint32 index = 1;  // Layer index
-    string name = 2;   // Layer name
+    uint32 index = 1; // Layer index
+    string name = 2;  // Layer name
 }
 
 message GetLayerInfoRequest {
@@ -62,76 +59,76 @@ message GetLayerInfoRequest {
 }
 
 message GetLayerInfoResponse {
-    repeated LayerInfo layers = 1;  // List of layers with their names
+    repeated LayerInfo layers = 1; // List of layers with their names
 }
 
 message SetScaleMultiplierRequest {
-    uint32 id    = 1;  // ID of the input processor to update
-    uint32 value = 2;  // New scaling multiplier
+    uint32 id = 1;    // ID of the input processor to update
+    uint32 value = 2; // New scaling multiplier
 }
 
 message SetScaleDivisorRequest {
-    uint32 id    = 1;  // ID of the input processor to update
-    uint32 value = 2;  // New scaling divisor
+    uint32 id = 1;    // ID of the input processor to update
+    uint32 value = 2; // New scaling divisor
 }
 
 message SetRotationRequest {
-    uint32 id   = 1;  // ID of the input processor to update
-    int32 value = 2;  // New rotation angle in degrees
+    uint32 id = 1;   // ID of the input processor to update
+    int32 value = 2; // New rotation angle in degrees
 }
 
 message ResetInputProcessorRequest {
-    uint32 id = 1;  // ID of the input processor to reset
+    uint32 id = 1; // ID of the input processor to reset
 }
 
 message SetTempLayerEnabledRequest {
-    uint32 id    = 1;  // ID of the input processor to update
-    bool enabled = 2;  // Whether temp-layer is enabled
+    uint32 id = 1;    // ID of the input processor to update
+    bool enabled = 2; // Whether temp-layer is enabled
 }
 
 message SetTempLayerLayerRequest {
-    uint32 id    = 1;  // ID of the input processor to update
-    uint32 layer = 2;  // Target layer ID for temp-layer
+    uint32 id = 1;    // ID of the input processor to update
+    uint32 layer = 2; // Target layer ID for temp-layer
 }
 
 message SetTempLayerActivationDelayRequest {
-    uint32 id                  = 1;  // ID of the input processor to update
-    uint32 activation_delay_ms = 2;  // Delay before activating (ms)
+    uint32 id = 1;                  // ID of the input processor to update
+    uint32 activation_delay_ms = 2; // Delay before activating (ms)
 }
 
 message SetTempLayerDeactivationDelayRequest {
-    uint32 id                    = 1;  // ID of the input processor to update
-    uint32 deactivation_delay_ms = 2;  // Delay before deactivating (ms)
+    uint32 id = 1;                    // ID of the input processor to update
+    uint32 deactivation_delay_ms = 2; // Delay before deactivating (ms)
 }
 
 message SetActiveLayersRequest {
-    uint32 id     = 1;  // ID of the input processor to update
-    uint32 layers = 2;  // Bitmask of layers where processor is active (0 = all)
+    uint32 id = 1;     // ID of the input processor to update
+    uint32 layers = 2; // Bitmask of layers where processor is active (0 = all)
 }
 
 message SetAxisSnapModeRequest {
-    uint32 id          = 1;  // ID of the input processor to update
-    AxisSnapMode mode  = 2;  // Snap mode
+    uint32 id = 1;         // ID of the input processor to update
+    AxisSnapMode mode = 2; // Snap mode
 }
 
 message SetAxisSnapThresholdRequest {
-    uint32 id        = 1;  // ID of the input processor to update
-    uint32 threshold = 2;  // Threshold for unsnapping
+    uint32 id = 1;        // ID of the input processor to update
+    uint32 threshold = 2; // Threshold for unsnapping
 }
 
 message SetAxisSnapTimeoutRequest {
-    uint32 id         = 1;  // ID of the input processor to update
-    uint32 timeout_ms = 2;  // Time window for threshold check (ms)
+    uint32 id = 1;         // ID of the input processor to update
+    uint32 timeout_ms = 2; // Time window for threshold check (ms)
 }
 
 message SetXyToScrollEnabledRequest {
-    uint32 id    = 1;  // ID of the input processor to update
-    bool enabled = 2;  // Whether XY-to-scroll mapping is enabled
+    uint32 id = 1;    // ID of the input processor to update
+    bool enabled = 2; // Whether XY-to-scroll mapping is enabled
 }
 
 message SetXySwapEnabledRequest {
-    uint32 id    = 1;  // ID of the input processor to update
-    bool enabled = 2;  // Whether XY-swap is enabled
+    uint32 id = 1;    // ID of the input processor to update
+    bool enabled = 2; // Whether XY-swap is enabled
 }
 
 message SetScaleMultiplierResponse {
@@ -187,12 +184,12 @@ message SetXyToScrollEnabledResponse {
 }
 
 message SetXySwapEnabledResponse {
-        // Empty - use notification to report changes
+    // Empty - use notification to report changes
 }
 
 message SetXInvertRequest {
-    uint32 id    = 1;  // ID of the input processor to update
-    bool invert  = 2;  // Whether to invert X axis
+    uint32 id = 1;   // ID of the input processor to update
+    bool invert = 2; // Whether to invert X axis
 }
 
 message SetXInvertResponse {
@@ -200,8 +197,8 @@ message SetXInvertResponse {
 }
 
 message SetYInvertRequest {
-    uint32 id    = 1;  // ID of the input processor to update
-    bool invert  = 2;  // Whether to invert Y axis
+    uint32 id = 1;   // ID of the input processor to update
+    bool invert = 2; // Whether to invert Y axis
 }
 
 message SetYInvertResponse {
@@ -211,10 +208,10 @@ message SetYInvertResponse {
 message Request {
     oneof request_type {
         ListInputProcessorsRequest list_input_processors = 1;
-        GetInputProcessorRequest get_input_processor     = 2;
-        SetScaleMultiplierRequest set_scale_multiplier   = 3;
-        SetScaleDivisorRequest set_scale_divisor         = 4;
-        SetRotationRequest set_rotation                  = 5;
+        GetInputProcessorRequest get_input_processor = 2;
+        SetScaleMultiplierRequest set_scale_multiplier = 3;
+        SetScaleDivisorRequest set_scale_divisor = 4;
+        SetRotationRequest set_rotation = 5;
         ResetInputProcessorRequest reset_input_processor = 6;
         SetTempLayerEnabledRequest set_temp_layer_enabled = 7;
         SetTempLayerLayerRequest set_temp_layer_layer = 8;
@@ -232,18 +229,16 @@ message Request {
     }
 }
 
-message ErrorResponse {
-    string message = 1;
-}
+message ErrorResponse { string message = 1; }
 
 message Response {
     oneof response_type {
-        ErrorResponse error                               = 1;
+        ErrorResponse error = 1;
         ListInputProcessorsResponse list_input_processors = 2;
-        GetInputProcessorResponse get_input_processor     = 3;
-        SetScaleMultiplierResponse set_scale_multiplier   = 4;
-        SetScaleDivisorResponse set_scale_divisor         = 5;
-        SetRotationResponse set_rotation                  = 6;
+        GetInputProcessorResponse get_input_processor = 3;
+        SetScaleMultiplierResponse set_scale_multiplier = 4;
+        SetScaleDivisorResponse set_scale_divisor = 5;
+        SetRotationResponse set_rotation = 6;
         ResetInputProcessorResponse reset_input_processor = 7;
         SetTempLayerEnabledResponse set_temp_layer_enabled = 8;
         SetTempLayerLayerResponse set_temp_layer_layer = 9;
@@ -262,12 +257,8 @@ message Response {
 }
 
 // Notifications
-message InputProcessorChangedNotification {
-    InputProcessorInfo processor = 1;
-}
+message InputProcessorChangedNotification { InputProcessorInfo processor = 1; }
 
 message Notification {
-    oneof notification_type {
-        InputProcessorChangedNotification input_processor_changed = 1;
-    }
+    oneof notification_type { InputProcessorChangedNotification input_processor_changed = 1; }
 }

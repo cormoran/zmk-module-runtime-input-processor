@@ -4,7 +4,7 @@
 description: |
   Behavior to temporarily enable axis snapping while a key is held.
   Useful for locking movement to a specific axis during text selection.
-  
+
   Parameters:
   - param1: Snap mode (0=none, 1=X, 2=Y)
   - param2: Threshold for unlocking snap

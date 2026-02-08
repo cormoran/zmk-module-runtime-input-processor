@@ -23,7 +23,7 @@
 		RC(0,0)  RC(0,1)  RC(1,0)  RC(1, 1)
 		>;
 	};
-	
+
 	runtime_input_processor: runtime_input_processor {
 		compatible = "zmk,input-processor-runtime";
 		processor-label = "default";
@@ -31,7 +31,7 @@
 		x-codes = <INPUT_REL_X>;
 		y-codes = <INPUT_REL_Y>;
 		track-remainders;
-		
+
 		#input-processor-cells = <0>;
 	};
 };
@@ -48,7 +48,7 @@
 / {
 	keymap {
 		compatible = "zmk,keymap";
-		
+
 		default_layer {
 			bindings = <
 			&mmv MOVE_UP

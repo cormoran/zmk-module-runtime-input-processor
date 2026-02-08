@@ -55,10 +55,9 @@ static int on_keymap_binding_pressed(struct zmk_behavior_binding *binding,
     // Apply temporary configuration (non-persistent)
     int ret = 0;
     if (cfg->scale_multiplier > 0 && cfg->scale_divisor > 0) {
-        ret = zmk_input_processor_runtime_set_scaling(data->processor, 
-                                                       cfg->scale_multiplier,
-                                                       cfg->scale_divisor,
-                                                       false);  // temporary
+        ret = zmk_input_processor_runtime_set_scaling(data->processor, cfg->scale_multiplier,
+                                                      cfg->scale_divisor,
+                                                      false); // temporary
         if (ret < 0) {
             LOG_ERR("Failed to set temporary scaling: %d", ret);
             return ret;
@@ -67,9 +66,8 @@ static int on_keymap_binding_pressed(struct zmk_behavior_binding *binding,
 
     // Update rotation if provided and valid (non-persistent)
     if (cfg->rotation_degrees >= -360 && cfg->rotation_degrees <= 360) {
-        ret = zmk_input_processor_runtime_set_rotation(data->processor, 
-                                                        cfg->rotation_degrees,
-                                                        false);  // temporary
+        ret = zmk_input_processor_runtime_set_rotation(data->processor, cfg->rotation_degrees,
+                                                       false); // temporary
         if (ret < 0) {
             LOG_ERR("Failed to set temporary rotation: %d", ret);
             return ret;
@@ -77,9 +75,8 @@ static int on_keymap_binding_pressed(struct zmk_behavior_binding *binding,
     }
 
     data->is_active = true;
-    LOG_INF("Applied temporary config to %s: scale=%d/%d, rotation=%d",
-            cfg->processor_name, cfg->scale_multiplier, cfg->scale_divisor, 
-            cfg->rotation_degrees);
+    LOG_INF("Applied temporary config to %s: scale=%d/%d, rotation=%d", cfg->processor_name,
+            cfg->scale_multiplier, cfg->scale_divisor, cfg->rotation_degrees);
 
     return ZMK_BEHAVIOR_OPAQUE;
 }
@@ -117,7 +114,7 @@ static const struct behavior_driver_api behavior_input_processor_temp_config_dri
             .scale_multiplier = DT_INST_PROP_OR(n, scale_multiplier, 0),                           \
             .scale_divisor = DT_INST_PROP_OR(n, scale_divisor, 0),                                 \
             .rotation_degrees = DT_INST_PROP_OR(n, rotation_degrees, 0),                           \
-        };                                                                                         \
+    };                                                                                             \
     BEHAVIOR_DT_INST_DEFINE(n, behavior_input_processor_temp_config_init, NULL,                    \
                             &behavior_input_processor_temp_config_data_##n,                        \
                             &behavior_input_processor_temp_config_config_##n, POST_KERNEL,         \
