@@ -583,10 +583,11 @@ static int load_processor_settings_cb(const char *name, size_t len,
             data->persistent_axis_snap_threshold = settings.axis_snap_threshold;
             data->persistent_axis_snap_timeout_ms =
                 settings.axis_snap_timeout_ms;
-            data->persistent_xy_to_scroll_enabled = settings.xy_to_scroll_enabled;
-            data->persistent_xy_swap_enabled      = settings.xy_swap_enabled;
-            data->persistent_x_invert = settings.x_invert;
-            data->persistent_y_invert = settings.y_invert;
+            data->persistent_xy_to_scroll_enabled =
+                settings.xy_to_scroll_enabled;
+            data->persistent_xy_swap_enabled = settings.xy_swap_enabled;
+            data->persistent_x_invert        = settings.x_invert;
+            data->persistent_y_invert        = settings.y_invert;
 
             // Apply to current values
             data->scale_multiplier   = settings.scale_multiplier;
@@ -961,9 +962,8 @@ int zmk_input_processor_runtime_get_config(
         .temp_layer_keep_keycodes =                                                                      \
             COND_CODE_1(DT_INST_NODE_HAS_PROP(n, temp_layer_keep_keycodes),                              \
                         (runtime_temp_layer_keep_keycodes_##n), (NULL)),                                 \
-        .initial_temp_layer_enabled =                                                                    \
-            DT_INST_NODE_HAS_PROP(n, temp_layer_enabled),                                                \
-        .initial_temp_layer_layer = DT_INST_PROP_OR(n, temp_layer, 0),                                   \
+        .initial_temp_layer_enabled = DT_INST_PROP(n, temp_layer_enabled),                               \
+        .initial_temp_layer_layer   = DT_INST_PROP_OR(n, temp_layer, 0),                                 \
         .initial_temp_layer_activation_delay_ms =                                                        \
             DT_INST_PROP_OR(n, temp_layer_activation_delay_ms, 100),                                     \
         .initial_temp_layer_deactivation_delay_ms =                                                      \
@@ -974,11 +974,10 @@ int zmk_input_processor_runtime_get_config(
             DT_INST_PROP_OR(n, axis_snap_threshold, 100),                                                \
         .initial_axis_snap_timeout_ms =                                                                  \
             DT_INST_PROP_OR(n, axis_snap_timeout_ms, 1000),                                              \
-        .initial_xy_to_scroll_enabled =                                                                  \
-            DT_INST_NODE_HAS_PROP(n, xy_to_scroll_enabled),                                              \
-        .initial_xy_swap_enabled = DT_INST_NODE_HAS_PROP(n, xy_swap_enabled),                            \
-        .initial_x_invert = DT_INST_NODE_HAS_PROP(n, x_invert),                                          \
-        .initial_y_invert = DT_INST_NODE_HAS_PROP(n, y_invert),                                          \
+        .initial_xy_to_scroll_enabled = DT_INST_PROP(n, xy_to_scroll_enabled),                           \
+        .initial_xy_swap_enabled      = DT_INST_PROP(n, xy_swap_enabled),                                \
+        .initial_x_invert             = DT_INST_PROP(n, x_invert),                                       \
+        .initial_y_invert             = DT_INST_PROP(n, y_invert),                                       \
     };                                                                                                   \
     static struct runtime_processor_data runtime_data_##n;                                               \
     DEVICE_DT_INST_DEFINE(n, &runtime_processor_init, NULL, &runtime_data_##n,                           \
@@ -1570,8 +1569,7 @@ int zmk_input_processor_runtime_set_axis_snap(const struct device *dev,
 }
 
 int zmk_input_processor_runtime_set_x_invert(const struct device *dev,
-                                              bool invert,
-                                              bool persistent) {
+                                             bool invert, bool persistent) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1598,8 +1596,7 @@ int zmk_input_processor_runtime_set_x_invert(const struct device *dev,
 }
 
 int zmk_input_processor_runtime_set_y_invert(const struct device *dev,
-                                              bool invert,
-                                              bool persistent) {
+                                             bool invert, bool persistent) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1672,8 +1669,8 @@ int zmk_input_processor_runtime_set_xy_to_scroll_enabled(
 }
 
 int zmk_input_processor_runtime_set_xy_swap_enabled(const struct device *dev,
-                                                     bool enabled,
-                                                     bool persistent) {
+                                                    bool enabled,
+                                                    bool persistent) {
     if (!dev) {
         return -EINVAL;
     }
