@@ -32,4 +32,3 @@ if(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR)
         add_dependencies(app ${ZEPHYR_CURRENT_LIBRARY})
     endif()
 endif()
-

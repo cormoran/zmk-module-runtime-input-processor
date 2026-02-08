@@ -33,15 +33,15 @@ struct zmk_input_processor_runtime_config {
     // Active layers bitmask (0 = all layers, otherwise each bit represents a layer)
     uint32_t active_layers;
     // Axis snap settings
-    uint8_t axis_snap_mode;  // zmk_input_processor_axis_snap_mode
+    uint8_t axis_snap_mode;        // zmk_input_processor_axis_snap_mode
     uint16_t axis_snap_threshold;  // Threshold for unsnapping
-    uint16_t axis_snap_timeout_ms;  // Time window for checking threshold
+    uint16_t axis_snap_timeout_ms; // Time window for checking threshold
     // Code mapping settings
-    bool xy_to_scroll_enabled;  // Map X/Y to horizontal/vertical scroll
-    bool xy_swap_enabled;  // Swap X and Y axes
+    bool xy_to_scroll_enabled; // Map X/Y to horizontal/vertical scroll
+    bool xy_swap_enabled;      // Swap X and Y axes
     // Axis reverse settings
-    bool x_invert;  // Whether to invert X axis
-    bool y_invert;  // Whether to invert Y axis
+    bool x_invert; // Whether to invert X axis
+    bool y_invert; // Whether to invert Y axis
 };
 
 /**
@@ -53,10 +53,8 @@ struct zmk_input_processor_runtime_config {
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_scaling(const struct device *dev,
-                                            uint32_t multiplier,
-                                            uint32_t divisor,
-                                            bool persistent);
+int zmk_input_processor_runtime_set_scaling(const struct device *dev, uint32_t multiplier,
+                                            uint32_t divisor, bool persistent);
 
 /**
  * @brief Set the rotation angle for a runtime input processor
@@ -92,8 +90,7 @@ void zmk_input_processor_runtime_restore_persistent(const struct device *dev);
  * @param config Pointer to store the configuration (can be NULL)
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_get_config(const struct device *dev,
-                                           const char **name,
+int zmk_input_processor_runtime_get_config(const struct device *dev, const char **name,
                                            struct zmk_input_processor_runtime_config *config);
 
 /**
@@ -128,7 +125,7 @@ int zmk_input_processor_runtime_get_id(const struct device *dev);
  * @return 0 on success, or the first non-zero value returned by callback
  */
 int zmk_input_processor_runtime_foreach(int (*callback)(const struct device *dev, void *user_data),
-                                       void *user_data);
+                                        void *user_data);
 
 /**
  * @brief Set temp-layer layer configuration
@@ -141,12 +138,9 @@ int zmk_input_processor_runtime_foreach(int (*callback)(const struct device *dev
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_temp_layer(const struct device *dev,
-                                               bool enabled,
-                                               uint8_t layer,
-                                               uint32_t activation_delay_ms,
-                                               uint32_t deactivation_delay_ms,
-                                               bool persistent);
+int zmk_input_processor_runtime_set_temp_layer(const struct device *dev, bool enabled,
+                                               uint8_t layer, uint32_t activation_delay_ms,
+                                               uint32_t deactivation_delay_ms, bool persistent);
 
 /**
  * @brief Set temp-layer enabled state
@@ -156,8 +150,7 @@ int zmk_input_processor_runtime_set_temp_layer(const struct device *dev,
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_temp_layer_enabled(const struct device *dev,
-                                                       bool enabled,
+int zmk_input_processor_runtime_set_temp_layer_enabled(const struct device *dev, bool enabled,
                                                        bool persistent);
 
 /**
@@ -168,8 +161,7 @@ int zmk_input_processor_runtime_set_temp_layer_enabled(const struct device *dev,
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_temp_layer_layer(const struct device *dev,
-                                                     uint8_t layer,
+int zmk_input_processor_runtime_set_temp_layer_layer(const struct device *dev, uint8_t layer,
                                                      bool persistent);
 
 /**
@@ -180,8 +172,9 @@ int zmk_input_processor_runtime_set_temp_layer_layer(const struct device *dev,
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_temp_layer_activation_delay(
-    const struct device *dev, uint32_t activation_delay_ms, bool persistent);
+int zmk_input_processor_runtime_set_temp_layer_activation_delay(const struct device *dev,
+                                                                uint32_t activation_delay_ms,
+                                                                bool persistent);
 
 /**
  * @brief Set temp-layer deactivation delay
@@ -191,8 +184,9 @@ int zmk_input_processor_runtime_set_temp_layer_activation_delay(
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(
-    const struct device *dev, uint32_t deactivation_delay_ms, bool persistent);
+int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(const struct device *dev,
+                                                                  uint32_t deactivation_delay_ms,
+                                                                  bool persistent);
 
 /**
  * @brief Set active layers bitmask
@@ -202,8 +196,7 @@ int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_active_layers(const struct device *dev,
-                                                  uint32_t layers,
+int zmk_input_processor_runtime_set_active_layers(const struct device *dev, uint32_t layers,
                                                   bool persistent);
 
 /**
@@ -222,9 +215,8 @@ void zmk_input_processor_runtime_temp_layer_keep_active(const struct device *dev
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_axis_snap_mode(const struct device *dev,
-                                                    uint8_t mode,
-                                                    bool persistent);
+int zmk_input_processor_runtime_set_axis_snap_mode(const struct device *dev, uint8_t mode,
+                                                   bool persistent);
 
 /**
  * @brief Set axis snap threshold
@@ -235,8 +227,7 @@ int zmk_input_processor_runtime_set_axis_snap_mode(const struct device *dev,
  * @return 0 on success, negative error code on failure
  */
 int zmk_input_processor_runtime_set_axis_snap_threshold(const struct device *dev,
-                                                         uint16_t threshold,
-                                                         bool persistent);
+                                                        uint16_t threshold, bool persistent);
 
 /**
  * @brief Set axis snap timeout
@@ -246,9 +237,8 @@ int zmk_input_processor_runtime_set_axis_snap_threshold(const struct device *dev
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_axis_snap_timeout(const struct device *dev,
-                                                       uint16_t timeout_ms,
-                                                       bool persistent);
+int zmk_input_processor_runtime_set_axis_snap_timeout(const struct device *dev, uint16_t timeout_ms,
+                                                      bool persistent);
 
 /**
  * @brief Set all axis snap configuration
@@ -260,11 +250,9 @@ int zmk_input_processor_runtime_set_axis_snap_timeout(const struct device *dev,
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_axis_snap(const struct device *dev,
-                                               uint8_t mode,
-                                               uint16_t threshold,
-                                               uint16_t timeout_ms,
-                                               bool persistent);
+int zmk_input_processor_runtime_set_axis_snap(const struct device *dev, uint8_t mode,
+                                              uint16_t threshold, uint16_t timeout_ms,
+                                              bool persistent);
 
 /**
  * @brief Set XY-to-scroll enabled state
@@ -276,9 +264,8 @@ int zmk_input_processor_runtime_set_axis_snap(const struct device *dev,
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_xy_to_scroll_enabled(const struct device *dev,
-                                                          bool enabled,
-                                                          bool persistent);
+int zmk_input_processor_runtime_set_xy_to_scroll_enabled(const struct device *dev, bool enabled,
+                                                         bool persistent);
 
 /**
  * @brief Set XY-swap enabled state
@@ -290,10 +277,9 @@ int zmk_input_processor_runtime_set_xy_to_scroll_enabled(const struct device *de
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_xy_swap_enabled(const struct device *dev,
-                                                     bool enabled,
-                                                     bool persistent);
- 
+int zmk_input_processor_runtime_set_xy_swap_enabled(const struct device *dev, bool enabled,
+                                                    bool persistent);
+
 /**
  *
  * @param dev Pointer to the device structure
@@ -301,9 +287,8 @@ int zmk_input_processor_runtime_set_xy_swap_enabled(const struct device *dev,
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_x_invert(const struct device *dev,
-                                              bool invert,
-                                              bool persistent);
+int zmk_input_processor_runtime_set_x_invert(const struct device *dev, bool invert,
+                                             bool persistent);
 
 /**
  * @brief Set Y axis inversion
@@ -313,6 +298,5 @@ int zmk_input_processor_runtime_set_x_invert(const struct device *dev,
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
-int zmk_input_processor_runtime_set_y_invert(const struct device *dev,
-                                              bool invert,
-                                              bool persistent);
+int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool invert,
+                                             bool persistent);

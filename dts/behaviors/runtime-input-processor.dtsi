@@ -23,10 +23,10 @@
 			// 1.5x scaling
 			scale-multiplier = <3>;
 			scale-divisor = <2>;
-			
+
 			#binding-cells = <0>;
 		};
-		
+
 		// Low DPI
     #if ZMK_BEHAVIOR_OMIT(RIP)
 		/omit-if-no-ref/
@@ -37,10 +37,10 @@
 			// x0.5 scaling
 			scale-multiplier = <1>;
 			scale-divisor = <2>;
-			
+
 			#binding-cells = <0>;
 		};
-		
+
 		// High Speed Scroll
     #if ZMK_BEHAVIOR_OMIT(RIP)
 		/omit-if-no-ref/
@@ -48,13 +48,13 @@
 		rip_hscr: hscr {
 			compatible = "zmk,behavior-input-processor-temp-config";
 			processor-name = "scroll";
-			
+
 			scale-multiplier = <3>;
 			scale-divisor = <2>;
-			
+
 			#binding-cells = <0>;
 		};
-		
+
 		// Low Speed Scroll
     #if ZMK_BEHAVIOR_OMIT(RIP)
 		/omit-if-no-ref/
@@ -64,10 +64,10 @@
 			processor-name = "scroll";
 			scale-multiplier = <1>;
 			scale-divisor = <2>;
-			
+
 			#binding-cells = <0>;
 		};
-		
+
         #if ZMK_BEHAVIOR_OMIT(RIP)
 		/omit-if-no-ref/
 		#endif
@@ -84,7 +84,7 @@
 		rip_ysnap: ysnap {
 			compatible = "zmk,behavior-input-processor-axis-snap";
 			processor-name = "scroll";
-			
+
 			#binding-cells = <2>;
 		};
 
@@ -95,7 +95,7 @@
 		rip_xsnap: xsnap {
 			compatible = "zmk,behavior-input-processor-axis-snap";
 			processor-name = "scroll";
-			
+
 			#binding-cells = <2>;
 		};
 	};
