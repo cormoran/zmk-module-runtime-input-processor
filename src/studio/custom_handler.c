@@ -85,6 +85,7 @@ static int handle_set_xy_to_scroll_enabled(
     cormoran_rip_Response *resp);
 static int handle_set_xy_swap_enabled(
     const cormoran_rip_SetXySwapEnabledRequest *req,
+    cormoran_rip_Response *resp);
 static int handle_set_x_invert(
     const cormoran_rip_SetXInvertRequest *req,
     cormoran_rip_Response *resp);
