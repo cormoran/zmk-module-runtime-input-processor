@@ -37,11 +37,11 @@ struct keybind_processor_config {
     const uint16_t *y_codes;
     size_t bindings_len;
     struct zmk_behavior_binding bindings[MAX_BINDINGS];
-    int32_t tick;
-    int32_t degree_offset;
+    int32_t initial_tick;
+    int32_t initial_degree_offset;
     bool track_remainders;
-    uint32_t wait_ms;
-    uint32_t tap_ms;
+    uint32_t initial_wait_ms;
+    uint32_t initial_tap_ms;
     uint32_t initial_active_layers;
 };
 
@@ -53,6 +53,11 @@ struct keybind_processor_data {
     // Remainders for precise tracking
     int32_t x_remainder;
     int32_t y_remainder;
+    // Runtime configurable settings
+    int32_t tick;
+    int32_t degree_offset;
+    uint32_t wait_ms;
+    uint32_t tap_ms;
     // Active layers bitmask (0 = all layers)
     uint32_t active_layers;
     // Precomputed rotation values for degree offset
@@ -171,7 +176,7 @@ static int trigger_binding(struct keybind_processor_data *data,
     data->last_triggered_binding = binding_idx;
 
     // Schedule release after tap_ms
-    k_work_reschedule(&data->release_work, K_MSEC(cfg->tap_ms));
+    k_work_reschedule(&data->release_work, K_MSEC(data->tap_ms));
 
     return 0;
 }
@@ -259,7 +264,7 @@ static int keybind_processor_handle_event(const struct device *dev, struct input
 
     // Check if we've accumulated enough movement to trigger
     int32_t total_movement_sq = data->x_accum * data->x_accum + data->y_accum * data->y_accum;
-    int32_t tick_sq = cfg->tick * cfg->tick;
+    int32_t tick_sq = data->tick * data->tick;
 
     if (total_movement_sq >= tick_sq) {
         // Determine which binding to trigger based on direction
@@ -282,8 +287,8 @@ static int keybind_processor_handle_event(const struct device *dev, struct input
             }
 
             // Apply wait delay if configured
-            if (cfg->wait_ms > 0) {
-                k_sleep(K_MSEC(cfg->wait_ms));
+            if (data->wait_ms > 0) {
+                k_sleep(K_MSEC(data->wait_ms));
             }
         }
     }
@@ -306,6 +311,10 @@ static int keybind_processor_init(const struct device *dev) {
     data->y_accum = 0;
     data->x_remainder = 0;
     data->y_remainder = 0;
+    data->tick = cfg->initial_tick;
+    data->degree_offset = cfg->initial_degree_offset;
+    data->wait_ms = cfg->initial_wait_ms;
+    data->tap_ms = cfg->initial_tap_ms;
     data->active_layers = cfg->initial_active_layers;
     data->last_triggered_binding = -1;
     data->key_pressed = false;
@@ -314,10 +323,10 @@ static int keybind_processor_init(const struct device *dev) {
     k_work_init_delayable(&data->release_work, release_work_handler);
 
     // Precompute offset rotation values
-    update_offset_rotation(data, cfg->degree_offset);
+    update_offset_rotation(data, data->degree_offset);
 
     LOG_INF("Keybind processor '%s' initialized: %d bindings, tick=%d, offset=%d°", cfg->name,
-            cfg->bindings_len, cfg->tick, cfg->degree_offset);
+            cfg->bindings_len, data->tick, data->degree_offset);
 
     return 0;
 }
@@ -344,11 +353,11 @@ static int keybind_processor_init(const struct device *dev) {
         .bindings = {COND_CODE_1(DT_INST_NODE_HAS_PROP(n, bindings),                               \
                                  (DT_INST_FOREACH_PROP_ELEM_SEP(n, bindings, GET_BINDING, ())),    \
                                  ())},                                                             \
-        .tick = DT_INST_PROP(n, tick),                                                             \
-        .degree_offset = DT_INST_PROP(n, degree_offset),                                           \
+        .initial_tick = DT_INST_PROP(n, tick),                                                     \
+        .initial_degree_offset = DT_INST_PROP(n, degree_offset),                                   \
         .track_remainders = DT_INST_PROP(n, track_remainders),                                     \
-        .wait_ms = DT_INST_PROP(n, wait_ms),                                                       \
-        .tap_ms = DT_INST_PROP(n, tap_ms),                                                         \
+        .initial_wait_ms = DT_INST_PROP(n, wait_ms),                                               \
+        .initial_tap_ms = DT_INST_PROP(n, tap_ms),                                                 \
         .initial_active_layers = DT_INST_PROP(n, active_layers),                                   \
     };                                                                                             \
     DEVICE_DT_INST_DEFINE(n, keybind_processor_init, NULL, &keybind_processor_data_##n,            \
@@ -389,11 +398,11 @@ int zmk_input_processor_keybind_get_config(const struct device *dev, const char 
     }
 
     if (config) {
-        config->tick = cfg->tick;
-        config->degree_offset = cfg->degree_offset;
+        config->tick = data->tick;
+        config->degree_offset = data->degree_offset;
         config->track_remainders = cfg->track_remainders;
-        config->wait_ms = cfg->wait_ms;
-        config->tap_ms = cfg->tap_ms;
+        config->wait_ms = data->wait_ms;
+        config->tap_ms = data->tap_ms;
         config->active_layers = data->active_layers;
     }
 
@@ -405,10 +414,11 @@ int zmk_input_processor_keybind_set_tick(const struct device *dev, int32_t tick)
         return -EINVAL;
     }
 
-    // Note: tick is in config which is const, so we can't change it at runtime
-    // This would require moving tick to data structure if runtime changes are needed
-    LOG_WRN("Runtime tick changes not yet implemented");
-    return -ENOTSUP;
+    struct keybind_processor_data *data = dev->data;
+    data->tick = tick;
+
+    LOG_INF("Set tick to %d", tick);
+    return 0;
 }
 
 int zmk_input_processor_keybind_set_degree_offset(const struct device *dev, int32_t degree_offset) {
@@ -424,10 +434,12 @@ int zmk_input_processor_keybind_set_degree_offset(const struct device *dev, int3
         degree_offset -= 360;
     }
 
-    // Note: degree_offset is in config which is const, so we can't change it at runtime
-    // This would require moving degree_offset to data structure if runtime changes are needed
-    LOG_WRN("Runtime degree offset changes not yet implemented");
-    return -ENOTSUP;
+    struct keybind_processor_data *data = dev->data;
+    data->degree_offset = degree_offset;
+    update_offset_rotation(data, degree_offset);
+
+    LOG_INF("Set degree offset to %d", degree_offset);
+    return 0;
 }
 
 int zmk_input_processor_keybind_set_wait_ms(const struct device *dev, uint32_t wait_ms) {
@@ -435,8 +447,11 @@ int zmk_input_processor_keybind_set_wait_ms(const struct device *dev, uint32_t w
         return -EINVAL;
     }
 
-    LOG_WRN("Runtime wait_ms changes not yet implemented");
-    return -ENOTSUP;
+    struct keybind_processor_data *data = dev->data;
+    data->wait_ms = wait_ms;
+
+    LOG_INF("Set wait_ms to %d", wait_ms);
+    return 0;
 }
 
 int zmk_input_processor_keybind_set_tap_ms(const struct device *dev, uint32_t tap_ms) {
@@ -444,8 +459,11 @@ int zmk_input_processor_keybind_set_tap_ms(const struct device *dev, uint32_t ta
         return -EINVAL;
     }
 
-    LOG_WRN("Runtime tap_ms changes not yet implemented");
-    return -ENOTSUP;
+    struct keybind_processor_data *data = dev->data;
+    data->tap_ms = tap_ms;
+
+    LOG_INF("Set tap_ms to %d", tap_ms);
+    return 0;
 }
 
 int zmk_input_processor_keybind_set_active_layers(const struct device *dev, uint32_t layers) {

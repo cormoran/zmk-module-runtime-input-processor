@@ -1,0 +1,75 @@
+/*
+* Copyright (c) 2026 The ZMK Contributors
+* SPDX-License-Identifier: MIT
+*
+* Common Keybind Processor Behavior Configurations
+*
+* This file provides pre-configured behaviors for keybind processors that can be easily
+* included and used in keyboard configurations.
+*/
+
+#include <dt-bindings/zmk/behaviors.h>
+
+/ {
+	behaviors {
+		// High sensitivity (lower tick value = more sensitive)
+#if ZMK_BEHAVIOR_OMIT(KEYBIND)
+		/omit-if-no-ref/
+		#endif
+		kb_high_sens: kb_high_sens {
+			compatible = "zmk,behavior-input-processor-keybind-temp-config";
+			processor-name = "kb4way";
+			tick = <20>;
+
+			#binding-cells = <0>;
+		};
+
+		// Low sensitivity (higher tick value = less sensitive)
+    #if ZMK_BEHAVIOR_OMIT(KEYBIND)
+		/omit-if-no-ref/
+		#endif
+		kb_low_sens: kb_low_sens {
+			compatible = "zmk,behavior-input-processor-keybind-temp-config";
+			processor-name = "kb4way";
+			tick = <80>;
+
+			#binding-cells = <0>;
+		};
+
+		// Fast tap (shorter tap duration)
+    #if ZMK_BEHAVIOR_OMIT(KEYBIND)
+		/omit-if-no-ref/
+		#endif
+		kb_fast_tap: kb_fast_tap {
+			compatible = "zmk,behavior-input-processor-keybind-temp-config";
+			processor-name = "kb4way";
+			tap-ms = <10>;
+
+			#binding-cells = <0>;
+		};
+
+		// Slow tap (longer tap duration for held keys)
+    #if ZMK_BEHAVIOR_OMIT(KEYBIND)
+		/omit-if-no-ref/
+		#endif
+		kb_slow_tap: kb_slow_tap {
+			compatible = "zmk,behavior-input-processor-keybind-temp-config";
+			processor-name = "kb4way";
+			tap-ms = <50>;
+
+			#binding-cells = <0>;
+		};
+
+		// Rotated 45 degrees (for diagonal-biased input)
+    #if ZMK_BEHAVIOR_OMIT(KEYBIND)
+		/omit-if-no-ref/
+		#endif
+		kb_rotate_45: kb_rotate_45 {
+			compatible = "zmk,behavior-input-processor-keybind-temp-config";
+			processor-name = "kb4way";
+			degree-offset = <45>;
+
+			#binding-cells = <0>;
+		};
+	};
+};
