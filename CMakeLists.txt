@@ -5,6 +5,7 @@ zephyr_include_directories(include)
 if(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR)
     # Add runtime input processor source
     target_sources(app PRIVATE src/pointing/input_processor_runtime.c)
+    target_sources(app PRIVATE src/pointing/input_processor_keybind.c)
     target_sources(app PRIVATE src/behaviors/behavior_input_processor_temp_config.c)
     target_sources(app PRIVATE src/behaviors/behavior_input_processor_temp_layer_keep_active.c)
     target_sources(app PRIVATE src/behaviors/behavior_input_processor_axis_snap.c)

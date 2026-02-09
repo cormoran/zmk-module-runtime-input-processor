@@ -386,6 +386,110 @@ When you press and hold the snap behavior key:
 2. Temporary snap settings are applied (with 1000ms timeout)
 3. When you release the key, original settings are restored
 
+### Input-to-Keypress Conversion (Keybind Processor)
+
+The keybind processor converts continuous input events (like trackball/touchpad movements) into discrete key press events. This allows you to use pointing devices to trigger keyboard actions.
+
+**Special thanks to [zettaface/zmk-input-processor-keybind](https://github.com/zettaface/zmk-input-processor-keybind) for the original concept and inspiration.**
+
+**Key Features:**
+
+- **1-8 Behavior Support**: Bind 1 to 8 different behaviors to directional movements
+- **2D Dimension Separation**: The 360-degree space is divided equally among behaviors (e.g., 4 behaviors = 90° each)
+- **Degree Offset**: Rotate the split points to customize directional mappings
+- **Per-Tick Triggering**: Behaviors trigger when movement accumulation reaches the tick threshold, then reset
+- **Runtime Configuration**: Supports configuration via web interface and device tree
+
+**Configuration via Device Tree:**
+
+```dts
+#include <input/processors/keybind-processor.dtsi>
+
+/ {
+    // Custom 4-way arrow key configuration
+    my_keybind: my_keybind {
+        compatible = "zmk,input-processor-keybind";
+        processor-label = "arrows";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+
+        // Behaviors assigned clockwise from positive Y axis (up)
+        // [0]=UP, [1]=RIGHT, [2]=DOWN, [3]=LEFT
+        bindings = <&kp UP>, <&kp RIGHT>, <&kp DOWN>, <&kp LEFT>;
+
+        tick = <40>;           // Movement units needed per activation
+        degree-offset = <0>;   // Rotation offset (0-359 degrees)
+        track-remainders;      // Enable precise movement tracking
+        wait-ms = <0>;         // Delay between activations
+        tap-ms = <20>;         // Key press duration
+
+        #input-processor-cells = <0>;
+    };
+
+    // WASD gaming keys
+    wasd_keybind: wasd_keybind {
+        compatible = "zmk,input-processor-keybind";
+        processor-label = "wasd";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+
+        bindings = <&kp W>, <&kp D>, <&kp S>, <&kp A>;
+        tick = <30>;
+        degree-offset = <0>;
+        track-remainders;
+
+        #input-processor-cells = <0>;
+    };
+};
+
+// Use in your input listener
+&trackball_listener {
+    status = "okay";
+    device = <&trackball>;
+    input-processors = <&my_keybind>;
+};
+```
+
+**Pre-configured Processors:**
+
+The module provides default keybind processors you can use:
+
+```dts
+#include <input/processors/keybind-processor.dtsi>
+
+&trackball_listener {
+    input-processors = <&keybind_arrows_4way>;  // 4-way arrow keys
+    // OR
+    input-processors = <&keybind_wasd>;         // WASD gaming keys
+};
+```
+
+**How Direction Mapping Works:**
+
+- The 360° space around the origin is divided into equal sections based on the number of bindings
+- With 4 bindings: 0-90° = UP, 90-180° = RIGHT, 180-270° = DOWN, 270-360° = LEFT
+- The `degree-offset` rotates these boundaries clockwise
+- Example: `degree-offset = 45` would shift boundaries by 45°
+
+**Behavior Parameters:**
+
+- **bindings**: List of 1-8 behaviors to trigger (required)
+- **tick**: Movement threshold for triggering (higher = less sensitive)
+- **degree-offset**: Rotate directional boundaries (0-359 degrees)
+- **track-remainders**: Enable precise sub-tick movement tracking
+- **wait-ms**: Delay between successive activations
+- **tap-ms**: Duration of each key press
+- **active-layers**: Bitmask of layers where processor is active (0 = all)
+
+**Example Use Cases:**
+
+1. **Arrow Key Navigation**: Use trackball for vim-style navigation
+2. **Gaming Controls**: Map trackball to WASD for movement in games
+3. **Custom Shortcuts**: Bind trackball directions to application shortcuts
+4. **Directional Macros**: Trigger complex macros based on swipe direction
+
 ## Development Guide
 
 ### Setup

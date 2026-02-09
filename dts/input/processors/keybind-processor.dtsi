@@ -1,0 +1,76 @@
+/*
+* Copyright (c) 2026 The ZMK Contributors
+* SPDX-License-Identifier: MIT
+*
+* Default Keybind Processor Definitions
+*
+* Special thanks to https://github.com/zettaface/zmk-input-processor-keybind
+* for the original concept and inspiration.
+*/
+
+#include <dt-bindings/zmk/keys.h>
+
+/ {
+
+	/omit-if-no-ref/
+	keybind_arrows_4way: keybind_arrows_4way {
+		compatible = "zmk,input-processor-keybind";
+		processor-label = "kb4way";
+		type = <INPUT_EV_REL>;
+		x-codes = <INPUT_REL_X>;
+		y-codes = <INPUT_REL_Y>;
+
+		// 4-way arrow keys: UP, RIGHT, DOWN, LEFT
+		bindings = <&kp UP>, <&kp RIGHT>, <&kp DOWN>, <&kp LEFT>;
+
+		tick = <40>;
+		degree-offset = <0>;
+		track-remainders;
+		wait-ms = <0>;
+		tap-ms = <20>;
+
+		#input-processor-cells = <0>;
+	};
+
+	/omit-if-no-ref/
+	keybind_arrows_8way: keybind_arrows_8way {
+		compatible = "zmk,input-processor-keybind";
+		processor-label = "kb8way";
+		type = <INPUT_EV_REL>;
+		x-codes = <INPUT_REL_X>;
+		y-codes = <INPUT_REL_Y>;
+
+		// 8-way keys: UP, UP-RIGHT, RIGHT, DOWN-RIGHT, DOWN, DOWN-LEFT, LEFT, UP-LEFT
+		// For diagonal directions, we'll use modifier combinations
+		// This is a simplified example - actual implementation may vary
+		bindings = <&kp UP>, <&kp RIGHT>, <&kp DOWN>, <&kp LEFT>;
+
+		tick = <40>;
+		degree-offset = <0>;
+		track-remainders;
+		wait-ms = <0>;
+		tap-ms = <20>;
+
+		#input-processor-cells = <0>;
+	};
+
+	/omit-if-no-ref/
+	keybind_wasd: keybind_wasd {
+		compatible = "zmk,input-processor-keybind";
+		processor-label = "kbwasd";
+		type = <INPUT_EV_REL>;
+		x-codes = <INPUT_REL_X>;
+		y-codes = <INPUT_REL_Y>;
+
+		// WASD keys for gaming: W (up), D (right), S (down), A (left)
+		bindings = <&kp W>, <&kp D>, <&kp S>, <&kp A>;
+
+		tick = <30>;
+		degree-offset = <0>;
+		track-remainders;
+		wait-ms = <0>;
+		tap-ms = <15>;
+
+		#input-processor-cells = <0>;
+	};
+};

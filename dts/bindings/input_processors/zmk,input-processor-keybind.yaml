@@ -1,0 +1,78 @@
+# Copyright (c) 2026 The ZMK Contributors
+# SPDX-License-Identifier: MIT
+
+description: |
+  Runtime configurable input processor that converts input events to key press events.
+  Supports 1-8 behaviors with 2D dimension separation and degree offset rotation.
+  Special thanks to https://github.com/zettaface/zmk-input-processor-keybind for the original concept.
+
+compatible: "zmk,input-processor-keybind"
+
+include: base.yaml
+
+properties:
+  processor-label:
+    type: string
+    required: true
+    description: |
+      Short label for the input processor (max 8 chars for BLE compatibility).
+      Used to identify the processor in runtime configuration.
+
+  type:
+    type: int
+    default: 0x02  # INPUT_EV_REL
+    description: Event type to process
+
+  x-codes:
+    type: array
+    required: true
+    description: X-axis input codes to process
+
+  y-codes:
+    type: array
+    required: true
+    description: Y-axis input codes to process
+
+  bindings:
+    type: phandle-array
+    description: |
+      List of behaviors to trigger (1-8 behaviors supported).
+      The 2D dimension is split into equal angular sections (360/count degrees each).
+      Behaviors are assigned in clockwise order starting from the positive Y axis (up).
+      Example with 4 behaviors: [0]=up, [1]=right, [2]=down, [3]=left
+
+  tick:
+    type: int
+    default: 10
+    description: |
+      Movement units needed per activation (higher = less sensitive).
+      Once tick threshold is reached, a behavior is triggered and accumulation resets.
+
+  degree-offset:
+    type: int
+    default: 0
+    description: |
+      Degree offset to rotate the 2D dimension split points (0-359).
+      Example: offset=0 means first behavior triggers for upward movement (Y>0).
+      offset=90 rotates split points 90 degrees clockwise.
+
+  track-remainders:
+    type: boolean
+    description: Track remainders for movement accumulation (enabled if present)
+
+  wait-ms:
+    type: int
+    default: 0
+    description: Delay before next activation (milliseconds)
+
+  tap-ms:
+    type: int
+    default: 20
+    description: Press-to-release timing for key taps (milliseconds)
+
+  active-layers:
+    type: int
+    default: 0
+    description: |
+      Bitmask of layers where processor should be active (0 = all layers).
+      Each bit represents a layer: bit 0 = layer 0, bit 1 = layer 1, etc.
