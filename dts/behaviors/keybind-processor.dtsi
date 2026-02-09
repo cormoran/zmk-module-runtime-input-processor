@@ -25,7 +25,7 @@
 		};
 
 		// Low sensitivity (higher tick value = less sensitive)
-    #if ZMK_BEHAVIOR_OMIT(KEYBIND)
+	#if ZMK_BEHAVIOR_OMIT(KEYBIND)
 		/omit-if-no-ref/
 		#endif
 		kb_low_sens: kb_low_sens {
@@ -37,7 +37,7 @@
 		};
 
 		// Fast tap (shorter tap duration)
-    #if ZMK_BEHAVIOR_OMIT(KEYBIND)
+	#if ZMK_BEHAVIOR_OMIT(KEYBIND)
 		/omit-if-no-ref/
 		#endif
 		kb_fast_tap: kb_fast_tap {
@@ -49,7 +49,7 @@
 		};
 
 		// Slow tap (longer tap duration for held keys)
-    #if ZMK_BEHAVIOR_OMIT(KEYBIND)
+	#if ZMK_BEHAVIOR_OMIT(KEYBIND)
 		/omit-if-no-ref/
 		#endif
 		kb_slow_tap: kb_slow_tap {
@@ -61,7 +61,7 @@
 		};
 
 		// Rotated 45 degrees (for diagonal-biased input)
-    #if ZMK_BEHAVIOR_OMIT(KEYBIND)
+	#if ZMK_BEHAVIOR_OMIT(KEYBIND)
 		/omit-if-no-ref/
 		#endif
 		kb_rotate_45: kb_rotate_45 {

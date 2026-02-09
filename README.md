@@ -490,6 +490,38 @@ The module provides default keybind processors you can use:
 3. **Custom Shortcuts**: Bind trackball directions to application shortcuts
 4. **Directional Macros**: Trigger complex macros based on swipe direction
 
+**Temporary Configuration via Behavior:**
+
+You can temporarily change keybind processor settings while holding a key:
+
+```dts
+#include <behaviors/keybind-processor.dtsi>
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+        default_layer {
+            bindings = <
+                &kb_high_sens   // Hold for higher sensitivity
+                &kb_low_sens    // Hold for lower sensitivity
+                &kb_rotate_45   // Hold to rotate directions 45 degrees
+                // ... other keys
+            >;
+        };
+    };
+};
+
+// Customize behavior settings
+&kb_high_sens {
+    tick = <15>;  // Very sensitive
+}
+```
+
+When you press and hold a temporary config behavior:
+
+1. Current settings are saved
+2. Temporary settings are applied
+3. When you release the key, original settings are restored
+
 ## Development Guide
 
 ### Setup

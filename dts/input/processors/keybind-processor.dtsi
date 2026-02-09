@@ -40,9 +40,9 @@
 		x-codes = <INPUT_REL_X>;
 		y-codes = <INPUT_REL_Y>;
 
-		// 8-way keys: UP, UP-RIGHT, RIGHT, DOWN-RIGHT, DOWN, DOWN-LEFT, LEFT, UP-LEFT
-		// For diagonal directions, we'll use modifier combinations
-		// This is a simplified example - actual implementation may vary
+		// 4-way bindings example
+		// For true 8-way support, add 8 bindings for all cardinal and diagonal directions
+		// Example: <&kp UP>, <&kp PG_UP>, <&kp RIGHT>, <&kp PG_DN>, <&kp DOWN>, <&kp HOME>, <&kp LEFT>, <&kp END>
 		bindings = <&kp UP>, <&kp RIGHT>, <&kp DOWN>, <&kp LEFT>;
 
 		tick = <40>;

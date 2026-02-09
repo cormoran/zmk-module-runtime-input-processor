@@ -287,6 +287,9 @@ static int keybind_processor_handle_event(const struct device *dev, struct input
             }
 
             // Apply wait delay if configured
+            // Note: Using k_sleep here intentionally blocks to prevent rapid-fire triggers.
+            // This is acceptable as it only blocks when a key is actually triggered,
+            // and the delay is typically very short (default is 0ms).
             if (data->wait_ms > 0) {
                 k_sleep(K_MSEC(data->wait_ms));
             }
