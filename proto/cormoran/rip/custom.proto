@@ -33,6 +33,11 @@ message InputProcessorInfo {
     // Axis invert settings
     bool x_invert = 16; // Whether to invert X axis
     bool y_invert = 17; // Whether to invert Y axis
+    // Keybind settings
+    bool keybind_enabled = 18;          // Whether keybind is enabled
+    uint32 keybind_behavior_count = 19; // Number of behaviors (1-8)
+    uint32 keybind_degree_offset = 20;  // Degree offset for rotation (0-359)
+    uint32 keybind_tick = 21;           // Movement units per activation
 }
 
 message ListInputProcessorsRequest {
@@ -205,6 +210,42 @@ message SetYInvertResponse {
     // Empty - use notification to report changes
 }
 
+message SetKeybindEnabledRequest {
+    uint32 id = 1;    // ID of the input processor to update
+    bool enabled = 2; // Whether keybind is enabled
+}
+
+message SetKeybindEnabledResponse {
+    // Empty - use notification to report changes
+}
+
+message SetKeybindBehaviorCountRequest {
+    uint32 id = 1;    // ID of the input processor to update
+    uint32 count = 2; // Number of behaviors (1-8)
+}
+
+message SetKeybindBehaviorCountResponse {
+    // Empty - use notification to report changes
+}
+
+message SetKeybindDegreeOffsetRequest {
+    uint32 id = 1;     // ID of the input processor to update
+    uint32 offset = 2; // Degree offset (0-359)
+}
+
+message SetKeybindDegreeOffsetResponse {
+    // Empty - use notification to report changes
+}
+
+message SetKeybindTickRequest {
+    uint32 id = 1;   // ID of the input processor to update
+    uint32 tick = 2; // Movement units per activation
+}
+
+message SetKeybindTickResponse {
+    // Empty - use notification to report changes
+}
+
 message Request {
     oneof request_type {
         ListInputProcessorsRequest list_input_processors = 1;
@@ -226,6 +267,10 @@ message Request {
         SetXySwapEnabledRequest set_xy_swap_enabled = 17;
         SetXInvertRequest set_x_invert = 18;
         SetYInvertRequest set_y_invert = 19;
+        SetKeybindEnabledRequest set_keybind_enabled = 20;
+        SetKeybindBehaviorCountRequest set_keybind_behavior_count = 21;
+        SetKeybindDegreeOffsetRequest set_keybind_degree_offset = 22;
+        SetKeybindTickRequest set_keybind_tick = 23;
     }
 }
 
@@ -253,6 +298,10 @@ message Response {
         SetXySwapEnabledResponse set_xy_swap_enabled = 18;
         SetXInvertResponse set_x_invert = 19;
         SetYInvertResponse set_y_invert = 20;
+        SetKeybindEnabledResponse set_keybind_enabled = 21;
+        SetKeybindBehaviorCountResponse set_keybind_behavior_count = 22;
+        SetKeybindDegreeOffsetResponse set_keybind_degree_offset = 23;
+        SetKeybindTickResponse set_keybind_tick = 24;
     }
 }
 
