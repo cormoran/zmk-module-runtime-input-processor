@@ -8,7 +8,7 @@ manifest:
   projects:
     - name: zmk
       remote: cormoran
-      revision: v0.3+custom-studio-protocol
+      revision: v0.3-branch+custom-studio-protocol
       import:
         file: app/west.yml
       clone-depth: 1
