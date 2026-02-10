@@ -430,6 +430,10 @@ trackpad_keybind: trackpad_keybind {
 
 For detailed examples and configuration guide, see [KEYBIND_EXAMPLE.md](./KEYBIND_EXAMPLE.md).
 
+**Special Thanks:**
+
+This feature was inspired by [zettaface/zmk-input-processor-keybind](https://github.com/zettaface/zmk-input-processor-keybind), which pioneered the concept of converting trackball movement to key presses in ZMK. Our implementation extends this idea with runtime configurability and web-based settings management.
+
 ## Development Guide
 
 ### Setup
