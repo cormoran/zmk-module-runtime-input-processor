@@ -134,6 +134,9 @@ struct runtime_processor_data {
     bool persistent_x_invert;
     bool persistent_y_invert;
 
+    // Pending changes tracking
+    bool has_pending_changes;
+
     // Temp-layer runtime state
     struct k_work_delayable temp_layer_activation_work;
     struct k_work_delayable temp_layer_deactivation_work;
@@ -873,6 +876,7 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         config->xy_swap_enabled = data->persistent_xy_swap_enabled;
         config->x_invert = data->persistent_x_invert;
         config->y_invert = data->persistent_y_invert;
+        config->has_pending_changes = data->has_pending_changes;
     }
 
     return 0;
@@ -1603,3 +1607,99 @@ int zmk_input_processor_runtime_set_xy_swap_enabled(const struct device *dev, bo
 
     return ret;
 }
+
+#if IS_ENABLED(CONFIG_SETTINGS)
+/**
+ * @brief Mark processor as having pending changes
+ */
+static void mark_pending_changes(const struct device *dev) {
+    if (!dev) {
+        return;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    if (!data->has_pending_changes) {
+        data->has_pending_changes = true;
+        // Raise event to notify UI
+        raise_state_changed_event(dev);
+        LOG_DBG("Marked processor as having pending changes");
+    }
+}
+
+/**
+ * @brief Clear pending changes flag
+ */
+static void clear_pending_changes(const struct device *dev) {
+    if (!dev) {
+        return;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    if (data->has_pending_changes) {
+        data->has_pending_changes = false;
+        // Raise event to notify UI
+        raise_state_changed_event(dev);
+        LOG_DBG("Cleared pending changes flag");
+    }
+}
+
+/**
+ * @brief Save processor settings immediately (bypassing debounce)
+ */
+static void save_processor_settings_immediately(const struct device *dev) {
+    if (!dev) {
+        return;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+
+    // Cancel any pending delayed save
+    k_work_cancel_delayable(&data->save_work);
+
+    // Save immediately
+    save_processor_settings_work_handler(&data->save_work.work);
+
+    // Clear pending changes flag
+    clear_pending_changes(dev);
+}
+
+/**
+ * @brief Cancel scheduled save and mark as pending
+ */
+void zmk_input_processor_runtime_cancel_save_and_mark_pending(const struct device *dev) {
+    if (!dev) {
+        return;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+
+    // Cancel any scheduled save
+    k_work_cancel_delayable(&data->save_work);
+
+    // Mark as having pending changes
+    mark_pending_changes(dev);
+
+    LOG_DBG("Cancelled save and marked pending");
+}
+
+/**
+ * @brief Save all pending changes to persistent storage
+ */
+int zmk_input_processor_runtime_save_all_pending(const struct device *dev) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+
+    if (!data->has_pending_changes) {
+        LOG_DBG("No pending changes to save");
+        return 0;
+    }
+
+    LOG_INF("Saving all pending changes");
+    save_processor_settings_immediately(dev);
+
+    return 0;
+}
+#endif // CONFIG_SETTINGS

@@ -74,6 +74,8 @@ static int handle_set_x_invert(const cormoran_rip_SetXInvertRequest *req,
                                cormoran_rip_Response *resp);
 static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
                                cormoran_rip_Response *resp);
+static int handle_save_all_pending(const cormoran_rip_SaveAllPendingRequest *req,
+                                   cormoran_rip_Response *resp);
 
 /**
  * Main request handler for the custom RPC subsystem.
@@ -151,11 +153,15 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         break;
     case cormoran_rip_Request_set_xy_swap_enabled_tag:
         rc = handle_set_xy_swap_enabled(&req.request_type.set_xy_swap_enabled, resp);
+        break;
     case cormoran_rip_Request_set_x_invert_tag:
         rc = handle_set_x_invert(&req.request_type.set_x_invert, resp);
         break;
     case cormoran_rip_Request_set_y_invert_tag:
         rc = handle_set_y_invert(&req.request_type.set_y_invert, resp);
+        break;
+    case cormoran_rip_Request_save_all_pending_tag:
+        rc = handle_save_all_pending(&req.request_type.save_all_pending, resp);
         break;
     default:
         LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -261,6 +267,7 @@ static int handle_get_input_processor(const cormoran_rip_GetInputProcessorReques
     result.processor.axis_snap_timeout_ms = config.axis_snap_timeout_ms;
     result.processor.x_invert = config.x_invert;
     result.processor.y_invert = config.y_invert;
+    result.processor.has_pending_changes = config.has_pending_changes;
 
     resp->which_response_type = cormoran_rip_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -294,6 +301,9 @@ static int handle_set_scale_multiplier(const cormoran_rip_SetScaleMultiplierRequ
         LOG_ERR("Failed to set scale multiplier: %d", ret);
         return ret;
     }
+
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
 
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_scale_multiplier_tag;
@@ -330,6 +340,9 @@ static int handle_set_scale_divisor(const cormoran_rip_SetScaleDivisorRequest *r
         return ret;
     }
 
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
+
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_scale_divisor_tag;
     resp->response_type.set_scale_divisor =
@@ -357,6 +370,9 @@ static int handle_set_rotation(const cormoran_rip_SetRotationRequest *req,
         LOG_ERR("Failed to set rotation: %d", ret);
         return ret;
     }
+
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
 
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_rotation_tag;
@@ -414,6 +430,9 @@ static int handle_set_temp_layer_enabled(const cormoran_rip_SetTempLayerEnabledR
         return ret;
     }
 
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
+
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_temp_layer_enabled_tag;
     resp->response_type.set_temp_layer_enabled = (cormoran_rip_SetTempLayerEnabledResponse)
@@ -441,6 +460,9 @@ static int handle_set_temp_layer_layer(const cormoran_rip_SetTempLayerLayerReque
         LOG_ERR("Failed to set temp-layer layer: %d", ret);
         return ret;
     }
+
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
 
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_temp_layer_layer_tag;
@@ -473,6 +495,9 @@ handle_set_temp_layer_activation_delay(const cormoran_rip_SetTempLayerActivation
         return ret;
     }
 
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
+
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_temp_layer_activation_delay_tag;
     resp->response_type.set_temp_layer_activation_delay =
@@ -504,6 +529,9 @@ static int handle_set_temp_layer_deactivation_delay(
         return ret;
     }
 
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
+
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_temp_layer_deactivation_delay_tag;
     resp->response_type.set_temp_layer_deactivation_delay =
@@ -533,6 +561,9 @@ static int handle_set_active_layers(const cormoran_rip_SetActiveLayersRequest *r
         return ret;
     }
 
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
+
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_active_layers_tag;
     resp->response_type.set_active_layers =
@@ -560,6 +591,9 @@ static int handle_set_axis_snap_mode(const cormoran_rip_SetAxisSnapModeRequest *
         LOG_ERR("Failed to set axis snap mode: %d", ret);
         return ret;
     }
+
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
 
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_axis_snap_mode_tag;
@@ -589,6 +623,9 @@ static int handle_set_axis_snap_threshold(const cormoran_rip_SetAxisSnapThreshol
         return ret;
     }
 
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
+
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_axis_snap_threshold_tag;
     resp->response_type.set_axis_snap_threshold = (cormoran_rip_SetAxisSnapThresholdResponse)
@@ -616,6 +653,9 @@ static int handle_set_axis_snap_timeout(const cormoran_rip_SetAxisSnapTimeoutReq
         LOG_ERR("Failed to set axis snap timeout: %d", ret);
         return ret;
     }
+
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
 
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_axis_snap_timeout_tag;
@@ -645,6 +685,9 @@ static int handle_set_x_invert(const cormoran_rip_SetXInvertRequest *req,
         return ret;
     }
 
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
+
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_x_invert_tag;
     resp->response_type.set_x_invert =
@@ -672,6 +715,9 @@ static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
         LOG_ERR("Failed to set Y invert: %d", ret);
         return ret;
     }
+
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
 
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_y_invert_tag;
@@ -757,6 +803,9 @@ static int handle_set_xy_to_scroll_enabled(const cormoran_rip_SetXyToScrollEnabl
         return ret;
     }
 
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
+
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_xy_to_scroll_enabled_tag;
     resp->response_type.set_xy_to_scroll_enabled = (cormoran_rip_SetXyToScrollEnabledResponse)
@@ -785,10 +834,52 @@ static int handle_set_xy_swap_enabled(const cormoran_rip_SetXySwapEnabledRequest
         return ret;
     }
 
+    // Cancel save and mark as pending - user will save explicitly
+    zmk_input_processor_runtime_cancel_save_and_mark_pending(dev);
+
     // Return empty response
     resp->which_response_type = cormoran_rip_Response_set_xy_swap_enabled_tag;
     resp->response_type.set_xy_swap_enabled =
         (cormoran_rip_SetXySwapEnabledResponse)cormoran_rip_SetXySwapEnabledResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * @brief Handle saving all pending changes
+ */
+static int handle_save_all_pending(const cormoran_rip_SaveAllPendingRequest *req,
+                                   cormoran_rip_Response *resp) {
+    LOG_INF("Saving all pending changes");
+
+    // Iterate over all input processors and save pending changes
+    struct save_all_context {
+        int saved_count;
+        int error_count;
+    } ctx = {.saved_count = 0, .error_count = 0};
+
+    // Helper callback to save each processor
+    int save_callback(const struct device *dev, void *user_data) {
+        struct save_all_context *ctx = (struct save_all_context *)user_data;
+
+        int ret = zmk_input_processor_runtime_save_all_pending(dev);
+        if (ret < 0) {
+            ctx->error_count++;
+            LOG_ERR("Failed to save processor settings: %d", ret);
+        } else {
+            ctx->saved_count++;
+        }
+        return 0;
+    }
+
+    zmk_input_processor_runtime_foreach(save_callback, &ctx);
+
+    LOG_INF("Saved %d processors, %d errors", ctx.saved_count, ctx.error_count);
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_save_all_pending_tag;
+    resp->response_type.save_all_pending =
+        (cormoran_rip_SaveAllPendingResponse)cormoran_rip_SaveAllPendingResponse_init_zero;
 
     return 0;
 }

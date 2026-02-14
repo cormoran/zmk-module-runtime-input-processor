@@ -33,6 +33,8 @@ message InputProcessorInfo {
     // Axis invert settings
     bool x_invert = 16; // Whether to invert X axis
     bool y_invert = 17; // Whether to invert Y axis
+    // Pending changes indicator
+    bool has_pending_changes = 18; // Whether there are unsaved changes
 }
 
 message ListInputProcessorsRequest {
@@ -205,6 +207,14 @@ message SetYInvertResponse {
     // Empty - use notification to report changes
 }
 
+message SaveAllPendingRequest {
+    // Empty - saves all pending changes to persistent storage
+}
+
+message SaveAllPendingResponse {
+    // Empty - use notification to report changes
+}
+
 message Request {
     oneof request_type {
         ListInputProcessorsRequest list_input_processors = 1;
@@ -226,6 +236,7 @@ message Request {
         SetXySwapEnabledRequest set_xy_swap_enabled = 17;
         SetXInvertRequest set_x_invert = 18;
         SetYInvertRequest set_y_invert = 19;
+        SaveAllPendingRequest save_all_pending = 20;
     }
 }
 
@@ -253,6 +264,7 @@ message Response {
         SetXySwapEnabledResponse set_xy_swap_enabled = 18;
         SetXInvertResponse set_x_invert = 19;
         SetYInvertResponse set_y_invert = 20;
+        SaveAllPendingResponse save_all_pending = 21;
     }
 }
 
