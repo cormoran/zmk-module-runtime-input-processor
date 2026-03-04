@@ -61,6 +61,8 @@ struct runtime_processor_config {
     // Axis reverse default settings from DT
     bool initial_x_invert;
     bool initial_y_invert;
+    // Temp-layer activation threshold default from DT
+    uint16_t initial_temp_layer_activation_threshold;
 };
 
 struct runtime_processor_data {
@@ -141,6 +143,11 @@ struct runtime_processor_data {
     bool temp_layer_keep_active; // Set by behavior to prevent deactivation
     int64_t last_input_timestamp;
     int64_t last_keypress_timestamp;
+
+    // Temp-layer activation threshold
+    uint16_t temp_layer_activation_threshold;
+    uint16_t persistent_temp_layer_activation_threshold;
+    int32_t temp_layer_activation_accum; // Accumulated movement for threshold check
 };
 
 static void update_rotation_values(struct runtime_processor_data *data) {
@@ -173,6 +180,8 @@ static void temp_layer_activation_work_handler(struct k_work *work) {
     int ret = zmk_keymap_layer_activate(data->temp_layer_layer);
     if (ret == 0) {
         data->temp_layer_layer_active = true;
+        // Reset accumulator now that layer is active
+        data->temp_layer_activation_accum = 0;
         LOG_INF("Temp-layer layer %d activated", data->temp_layer_layer);
     } else {
         LOG_ERR("Failed to activate temp-layer layer %d: %d", data->temp_layer_layer, ret);
@@ -318,8 +327,26 @@ static int runtime_processor_handle_event(const struct device *dev, struct input
             // Only activate if no key press within activation delay window
             if (data->last_keypress_timestamp == 0 ||
                 (now - data->last_keypress_timestamp) >= data->temp_layer_activation_delay_ms) {
-                // Schedule activation
-                k_work_reschedule(&data->temp_layer_activation_work, K_NO_WAIT);
+                // Check activation threshold
+                bool threshold_met = true;
+                if (data->temp_layer_activation_threshold > 0) {
+                    int32_t abs_val =
+                        (int32_t)event->value < 0 ? -(int32_t)event->value : (int32_t)event->value;
+                    data->temp_layer_activation_accum += abs_val;
+                    if (data->temp_layer_activation_accum < data->temp_layer_activation_threshold) {
+                        threshold_met = false;
+                        LOG_DBG("Temp-layer activation suppressed: accum=%d, threshold=%d",
+                                data->temp_layer_activation_accum,
+                                data->temp_layer_activation_threshold);
+                    } else {
+                        LOG_DBG("Temp-layer activation threshold met: accum=%d",
+                                data->temp_layer_activation_accum);
+                    }
+                }
+                if (threshold_met) {
+                    // Schedule activation
+                    k_work_reschedule(&data->temp_layer_activation_work, K_NO_WAIT);
+                }
             }
         }
     }
@@ -493,6 +520,7 @@ struct processor_settings {
     bool xy_swap_enabled;
     bool x_invert;
     bool y_invert;
+    uint16_t temp_layer_activation_threshold;
 };
 
 static void save_processor_settings_work_handler(struct k_work *work) {
@@ -518,6 +546,7 @@ static void save_processor_settings_work_handler(struct k_work *work) {
         .xy_swap_enabled = data->persistent_xy_swap_enabled,
         .x_invert = data->persistent_x_invert,
         .y_invert = data->persistent_y_invert,
+        .temp_layer_activation_threshold = data->persistent_temp_layer_activation_threshold,
     };
 
     char path[64];
@@ -563,6 +592,8 @@ static int load_processor_settings_cb(const char *name, size_t len, settings_rea
             data->persistent_xy_swap_enabled = settings.xy_swap_enabled;
             data->persistent_x_invert = settings.x_invert;
             data->persistent_y_invert = settings.y_invert;
+            data->persistent_temp_layer_activation_threshold =
+                settings.temp_layer_activation_threshold;
 
             // Apply to current values
             data->scale_multiplier = settings.scale_multiplier;
@@ -580,6 +611,7 @@ static int load_processor_settings_cb(const char *name, size_t len, settings_rea
             data->xy_swap_enabled = settings.xy_swap_enabled;
             data->x_invert = settings.x_invert;
             data->y_invert = settings.y_invert;
+            data->temp_layer_activation_threshold = settings.temp_layer_activation_threshold;
             update_rotation_values(data);
 
             LOG_INF("Loaded settings for %s: scale=%d/%d, rotation=%d, "
@@ -663,6 +695,11 @@ static int runtime_processor_init(const struct device *dev) {
     data->y_invert = cfg->initial_y_invert;
     data->persistent_x_invert = cfg->initial_x_invert;
     data->persistent_y_invert = cfg->initial_y_invert;
+
+    // Initialize temp-layer activation threshold from DT defaults
+    data->temp_layer_activation_threshold = cfg->initial_temp_layer_activation_threshold;
+    data->persistent_temp_layer_activation_threshold = cfg->initial_temp_layer_activation_threshold;
+    data->temp_layer_activation_accum = 0;
 
     update_rotation_values(data);
 
@@ -802,6 +839,11 @@ int zmk_input_processor_runtime_reset(const struct device *dev) {
     data->persistent_x_invert = cfg->initial_x_invert;
     data->persistent_y_invert = cfg->initial_y_invert;
 
+    // Reset temp-layer activation threshold to defaults
+    data->temp_layer_activation_threshold = cfg->initial_temp_layer_activation_threshold;
+    data->persistent_temp_layer_activation_threshold = cfg->initial_temp_layer_activation_threshold;
+    data->temp_layer_activation_accum = 0;
+
     update_rotation_values(data);
 
     LOG_INF("Reset processor '%s' to defaults", cfg->name);
@@ -873,6 +915,7 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         config->xy_swap_enabled = data->persistent_xy_swap_enabled;
         config->x_invert = data->persistent_x_invert;
         config->y_invert = data->persistent_y_invert;
+        config->temp_layer_activation_threshold = data->persistent_temp_layer_activation_threshold;
     }
 
     return 0;
@@ -929,6 +972,8 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         .initial_xy_swap_enabled = DT_INST_PROP(n, xy_swap_enabled),                               \
         .initial_x_invert = DT_INST_PROP(n, x_invert),                                             \
         .initial_y_invert = DT_INST_PROP(n, y_invert),                                             \
+        .initial_temp_layer_activation_threshold =                                                 \
+            DT_INST_PROP_OR(n, temp_layer_activation_threshold, 0),                                \
     };                                                                                             \
     static struct runtime_processor_data runtime_data_##n;                                         \
     DEVICE_DT_INST_DEFINE(n, &runtime_processor_init, NULL, &runtime_data_##n,                     \
@@ -1024,6 +1069,8 @@ static int keycode_state_changed_listener(const zmk_event_t *eh) {
         const struct device *dev = runtime_processors[i];
         struct runtime_processor_data *data = dev->data;
         data->last_keypress_timestamp = now;
+        // Reset activation accumulator on keypress to suppress accidental activation
+        data->temp_layer_activation_accum = 0;
     }
 
     return ZMK_EV_EVENT_BUBBLE;
@@ -1550,6 +1597,36 @@ void zmk_input_processor_runtime_temp_layer_keep_active(const struct device *dev
     if (!keep_active && data->temp_layer_enabled && data->temp_layer_layer_active) {
         k_work_reschedule(&data->temp_layer_deactivation_work, K_NO_WAIT);
     }
+}
+
+int zmk_input_processor_runtime_set_temp_layer_activation_threshold(const struct device *dev,
+                                                                    uint16_t threshold,
+                                                                    bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->temp_layer_activation_threshold = threshold;
+    // Reset accumulator when threshold changes
+    data->temp_layer_activation_accum = 0;
+
+    if (persistent) {
+        data->persistent_temp_layer_activation_threshold = threshold;
+    }
+
+    LOG_INF("Temp-layer activation threshold: %d%s", threshold,
+            persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
 }
 
 int zmk_input_processor_runtime_set_xy_to_scroll_enabled(const struct device *dev, bool enabled,

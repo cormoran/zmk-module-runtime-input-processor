@@ -83,6 +83,7 @@ static int input_processor_state_changed_listener(const zmk_event_t *eh) {
     info->xy_swap_enabled = ev->config.xy_swap_enabled;
     info->x_invert = ev->config.x_invert;
     info->y_invert = ev->config.y_invert;
+    info->temp_layer_activation_threshold = ev->config.temp_layer_activation_threshold;
 
     // Send notification via custom studio subsystem
     pb_callback_t encode_cb = {.funcs.encode = encode_notification, .arg = &notification};

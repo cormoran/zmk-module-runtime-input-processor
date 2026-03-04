@@ -132,3 +132,11 @@ properties:
   y-invert:
     type: boolean
     description: If present, invert Y axis values (positive becomes negative and vice versa)
+
+  temp-layer-activation-threshold:
+    type: int
+    default: 0
+    description: |
+      Minimum cumulative movement required to activate temp-layer (0 = disabled).
+      When set, the temp-layer will not be activated until the accumulated input movement
+      exceeds this threshold. This helps suppress accidental activation from typing vibration.

@@ -42,6 +42,8 @@ struct zmk_input_processor_runtime_config {
     // Axis reverse settings
     bool x_invert; // Whether to invert X axis
     bool y_invert; // Whether to invert Y axis
+    // Temp-layer activation threshold (0 = disabled)
+    uint16_t temp_layer_activation_threshold; // Minimum cumulative movement to activate temp-layer
 };
 
 /**
@@ -300,3 +302,19 @@ int zmk_input_processor_runtime_set_x_invert(const struct device *dev, bool inve
  */
 int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool invert,
                                              bool persistent);
+
+/**
+ * @brief Set temp-layer activation threshold
+ *
+ * When threshold > 0, the temp-layer will not activate until the accumulated
+ * input movement exceeds the threshold. This suppresses accidental activation
+ * from typing vibration.
+ *
+ * @param dev Pointer to the device structure
+ * @param threshold Minimum cumulative movement to activate temp-layer (0 = disabled)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_temp_layer_activation_threshold(const struct device *dev,
+                                                                    uint16_t threshold,
+                                                                    bool persistent);
