@@ -77,6 +77,8 @@ static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
                                cormoran_rip_Response *resp);
 static int handle_set_temp_layer_activation_threshold(
     const cormoran_rip_SetTempLayerActivationThresholdRequest *req, cormoran_rip_Response *resp);
+static int handle_set_temp_layer_activation_timeout(
+    const cormoran_rip_SetTempLayerActivationTimeoutRequest *req, cormoran_rip_Response *resp);
 
 /**
  * Main request handler for the custom RPC subsystem.
@@ -163,6 +165,10 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
     case cormoran_rip_Request_set_temp_layer_activation_threshold_tag:
         rc = handle_set_temp_layer_activation_threshold(
             &req.request_type.set_temp_layer_activation_threshold, resp);
+        break;
+    case cormoran_rip_Request_set_temp_layer_activation_timeout_tag:
+        rc = handle_set_temp_layer_activation_timeout(
+            &req.request_type.set_temp_layer_activation_timeout, resp);
         break;
     default:
         LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -269,6 +275,7 @@ static int handle_get_input_processor(const cormoran_rip_GetInputProcessorReques
     result.processor.x_invert = config.x_invert;
     result.processor.y_invert = config.y_invert;
     result.processor.temp_layer_activation_threshold = config.temp_layer_activation_threshold;
+    result.processor.temp_layer_activation_timeout_ms = config.temp_layer_activation_timeout_ms;
 
     resp->which_response_type = cormoran_rip_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -828,6 +835,36 @@ static int handle_set_temp_layer_activation_threshold(
     resp->response_type.set_temp_layer_activation_threshold =
         (cormoran_rip_SetTempLayerActivationThresholdResponse)
             cormoran_rip_SetTempLayerActivationThresholdResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting temp-layer activation timeout (decay speed)
+ */
+static int handle_set_temp_layer_activation_timeout(
+    const cormoran_rip_SetTempLayerActivationTimeoutRequest *req, cormoran_rip_Response *resp) {
+    LOG_DBG("Setting temp-layer activation timeout for id=%d to %d ms", req->id, req->timeout_ms);
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Clamp to uint16_t max since internal storage is uint16_t
+    uint16_t timeout_ms = req->timeout_ms > UINT16_MAX ? UINT16_MAX : (uint16_t)req->timeout_ms;
+    int ret = zmk_input_processor_runtime_set_temp_layer_activation_timeout(dev, timeout_ms, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set temp-layer activation timeout: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_temp_layer_activation_timeout_tag;
+    resp->response_type.set_temp_layer_activation_timeout =
+        (cormoran_rip_SetTempLayerActivationTimeoutResponse)
+            cormoran_rip_SetTempLayerActivationTimeoutResponse_init_zero;
 
     return 0;
 }

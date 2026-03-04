@@ -106,6 +106,8 @@ export function InputProcessorManager() {
     useState<number>(500);
   const [tempLayerActivationThreshold, setTempLayerActivationThreshold] =
     useState<number>(0);
+  const [tempLayerActivationTimeout, setTempLayerActivationTimeout] =
+    useState<number>(0);
 
   // Active layers state
   const [activeLayers, setActiveLayers] = useState<number>(0);
@@ -457,6 +459,24 @@ export function InputProcessorManager() {
         }
       }
 
+      if (
+        currentProcessor.tempLayerActivationTimeoutMs !==
+        tempLayerActivationTimeout
+      ) {
+        const timeoutRequest = Request.create({
+          setTempLayerActivationTimeout: {
+            id: selectedProcessorId,
+            timeoutMs: tempLayerActivationTimeout,
+          },
+        });
+        const timeoutResp = await callRPC(timeoutRequest);
+        if (timeoutResp?.error) {
+          setError(timeoutResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // Updates will come via notifications
     } catch (err) {
       setError(
@@ -486,6 +506,7 @@ export function InputProcessorManager() {
     xInvert,
     yInvert,
     tempLayerActivationThreshold,
+    tempLayerActivationTimeout,
   ]);
 
   const selectProcessor = useCallback(
@@ -509,6 +530,7 @@ export function InputProcessorManager() {
         setXInvert(proc.xInvert);
         setYInvert(proc.yInvert);
         setTempLayerActivationThreshold(proc.tempLayerActivationThreshold);
+        setTempLayerActivationTimeout(proc.tempLayerActivationTimeoutMs);
       }
     },
     [processors]
@@ -571,6 +593,7 @@ export function InputProcessorManager() {
               setTempLayerActivationThreshold(
                 proc.tempLayerActivationThreshold
               );
+              setTempLayerActivationTimeout(proc.tempLayerActivationTimeoutMs);
             }
 
             // If no processor is selected yet, select the first one
@@ -594,6 +617,7 @@ export function InputProcessorManager() {
               setTempLayerActivationThreshold(
                 proc.tempLayerActivationThreshold
               );
+              setTempLayerActivationTimeout(proc.tempLayerActivationTimeoutMs);
             }
           }
         } catch (err) {
@@ -873,11 +897,43 @@ export function InputProcessorManager() {
                 marginTop: "0.25rem",
               }}
             >
-              Minimum cumulative movement before temp-layer activates (0 =
-              disabled). Increase to suppress accidental activation from typing
-              vibration.
+              Minimum cumulative signed movement before temp-layer activates (0
+              = disabled). Oscillating vibration cancels out; intentional
+              directional movement accumulates past the threshold.
             </div>
           </div>
+
+          {tempLayerActivationThreshold > 0 && (
+            <div className="input-group">
+              <label htmlFor="temp-layer-activation-timeout">
+                Vibration Suppression Decay (ms):
+              </label>
+              <input
+                id="temp-layer-activation-timeout"
+                type="number"
+                min="0"
+                max="65535"
+                step="100"
+                value={tempLayerActivationTimeout}
+                onChange={(e) =>
+                  setTempLayerActivationTimeout(parseInt(e.target.value) || 0)
+                }
+                aria-describedby="temp-layer-activation-timeout-desc"
+              />
+              <div
+                id="temp-layer-activation-timeout-desc"
+                style={{
+                  fontSize: "0.85em",
+                  color: "#666",
+                  marginTop: "0.25rem",
+                }}
+              >
+                Time window (ms) over which the accumulator decays to zero (0 =
+                no decay). Smaller values decay faster, helping brief vibration
+                bursts reset before the threshold is crossed.
+              </div>
+            </div>
+          )}
 
           <hr style={{ margin: "1.5rem 0", border: "1px solid #e0e0e0" }} />
 

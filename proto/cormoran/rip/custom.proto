@@ -35,7 +35,8 @@ message InputProcessorInfo {
     bool y_invert = 17; // Whether to invert Y axis
     // Temp-layer activation threshold (0 = disabled)
     uint32 temp_layer_activation_threshold =
-        18; // Minimum cumulative movement required to activate temp-layer
+        18; // Minimum cumulative signed movement required to activate temp-layer
+    uint32 temp_layer_activation_timeout_ms = 19; // Time window for threshold decay (0 = no decay)
 }
 
 message ListInputProcessorsRequest {
@@ -209,11 +210,21 @@ message SetYInvertResponse {
 }
 
 message SetTempLayerActivationThresholdRequest {
-    uint32 id = 1;        // ID of the input processor to update
-    uint32 threshold = 2; // Minimum cumulative movement to activate temp-layer (0 = disabled)
+    uint32 id = 1; // ID of the input processor to update
+    uint32 threshold =
+        2; // Minimum cumulative signed movement to activate temp-layer (0 = disabled)
 }
 
 message SetTempLayerActivationThresholdResponse {
+    // Empty - use notification to report changes
+}
+
+message SetTempLayerActivationTimeoutRequest {
+    uint32 id = 1;         // ID of the input processor to update
+    uint32 timeout_ms = 2; // Time window for threshold decay (0 = no decay)
+}
+
+message SetTempLayerActivationTimeoutResponse {
     // Empty - use notification to report changes
 }
 
@@ -239,6 +250,7 @@ message Request {
         SetXInvertRequest set_x_invert = 18;
         SetYInvertRequest set_y_invert = 19;
         SetTempLayerActivationThresholdRequest set_temp_layer_activation_threshold = 20;
+        SetTempLayerActivationTimeoutRequest set_temp_layer_activation_timeout = 21;
     }
 }
 
@@ -267,6 +279,7 @@ message Response {
         SetXInvertResponse set_x_invert = 19;
         SetYInvertResponse set_y_invert = 20;
         SetTempLayerActivationThresholdResponse set_temp_layer_activation_threshold = 21;
+        SetTempLayerActivationTimeoutResponse set_temp_layer_activation_timeout = 22;
     }
 }
 

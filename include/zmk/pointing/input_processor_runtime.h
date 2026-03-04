@@ -43,7 +43,8 @@ struct zmk_input_processor_runtime_config {
     bool x_invert; // Whether to invert X axis
     bool y_invert; // Whether to invert Y axis
     // Temp-layer activation threshold (0 = disabled)
-    uint16_t temp_layer_activation_threshold; // Minimum cumulative movement to activate temp-layer
+    uint16_t temp_layer_activation_threshold;  // Minimum cumulative signed movement to activate
+    uint16_t temp_layer_activation_timeout_ms; // Decay time window for accumulator (0 = no decay)
 };
 
 /**
@@ -307,14 +308,30 @@ int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool inve
  * @brief Set temp-layer activation threshold
  *
  * When threshold > 0, the temp-layer will not activate until the accumulated
- * input movement exceeds the threshold. This suppresses accidental activation
- * from typing vibration.
+ * signed input movement exceeds the threshold. Oscillating vibration (alternating
+ * +/-) cancels out, while intentional directional movement accumulates.
  *
  * @param dev Pointer to the device structure
- * @param threshold Minimum cumulative movement to activate temp-layer (0 = disabled)
+ * @param threshold Minimum cumulative signed movement to activate temp-layer (0 = disabled)
  * @param persistent If true, save to persistent storage; if false, temporary
  * @return 0 on success, negative error code on failure
  */
 int zmk_input_processor_runtime_set_temp_layer_activation_threshold(const struct device *dev,
                                                                     uint16_t threshold,
                                                                     bool persistent);
+
+/**
+ * @brief Set temp-layer activation accumulator decay timeout
+ *
+ * When timeout_ms > 0, the activation accumulator decays toward zero over the
+ * specified time window. This ensures brief vibration bursts decay away before
+ * the threshold is reached.
+ *
+ * @param dev Pointer to the device structure
+ * @param timeout_ms Decay time window in ms (0 = no decay)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_temp_layer_activation_timeout(const struct device *dev,
+                                                                  uint16_t timeout_ms,
+                                                                  bool persistent);

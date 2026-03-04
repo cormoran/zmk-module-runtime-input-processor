@@ -137,6 +137,14 @@ properties:
     type: int
     default: 0
     description: |
-      Minimum cumulative movement required to activate temp-layer (0 = disabled).
-      When set, the temp-layer will not be activated until the accumulated input movement
-      exceeds this threshold. This helps suppress accidental activation from typing vibration.
+      Minimum cumulative signed movement required to activate temp-layer (0 = disabled).
+      Uses signed accumulation so that oscillating vibration (alternating +/-) cancels out,
+      while intentional directional movement accumulates past the threshold.
+
+  temp-layer-activation-timeout-ms:
+    type: int
+    default: 0
+    description: |
+      Time window (ms) over which the activation accumulator decays back toward zero
+      (0 = no decay). When set, the accumulator decreases at a rate of threshold/timeout
+      per millisecond, so brief vibrations decay away before the threshold is reached.

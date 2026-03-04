@@ -29,6 +29,9 @@
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
+/* Time slice for accumulator decay calculations (ms) */
+#define ACCUMULATOR_DECAY_PERIOD_MS 50
+
 struct runtime_processor_config {
     const char *name;
     uint8_t type;
@@ -63,6 +66,7 @@ struct runtime_processor_config {
     bool initial_y_invert;
     // Temp-layer activation threshold default from DT
     uint16_t initial_temp_layer_activation_threshold;
+    uint16_t initial_temp_layer_activation_timeout_ms;
 };
 
 struct runtime_processor_data {
@@ -147,7 +151,10 @@ struct runtime_processor_data {
     // Temp-layer activation threshold
     uint16_t temp_layer_activation_threshold;
     uint16_t persistent_temp_layer_activation_threshold;
-    int32_t temp_layer_activation_accum; // Accumulated movement for threshold check
+    uint16_t temp_layer_activation_timeout_ms;
+    uint16_t persistent_temp_layer_activation_timeout_ms;
+    int32_t temp_layer_activation_accum; // Accumulated signed movement for threshold check
+    int64_t temp_layer_activation_last_decay_timestamp; // Last time accumulator was decayed
 };
 
 static void update_rotation_values(struct runtime_processor_data *data) {
@@ -180,8 +187,9 @@ static void temp_layer_activation_work_handler(struct k_work *work) {
     int ret = zmk_keymap_layer_activate(data->temp_layer_layer);
     if (ret == 0) {
         data->temp_layer_layer_active = true;
-        // Reset accumulator now that layer is active
+        // Reset accumulator and decay timestamp now that layer is active
         data->temp_layer_activation_accum = 0;
+        data->temp_layer_activation_last_decay_timestamp = 0;
         LOG_INF("Temp-layer layer %d activated", data->temp_layer_layer);
     } else {
         LOG_ERR("Failed to activate temp-layer layer %d: %d", data->temp_layer_layer, ret);
@@ -330,10 +338,50 @@ static int runtime_processor_handle_event(const struct device *dev, struct input
                 // Check activation threshold
                 bool threshold_met = true;
                 if (data->temp_layer_activation_threshold > 0) {
-                    int32_t abs_val =
-                        (int32_t)event->value < 0 ? -(int32_t)event->value : (int32_t)event->value;
-                    data->temp_layer_activation_accum += abs_val;
-                    if (data->temp_layer_activation_accum < data->temp_layer_activation_threshold) {
+                    // Decay accumulator over time (similar to axis snap decay)
+                    if (data->temp_layer_activation_timeout_ms > 0 &&
+                        data->temp_layer_activation_last_decay_timestamp > 0) {
+                        int64_t elapsed = now - data->temp_layer_activation_last_decay_timestamp;
+                        if (elapsed > 0) {
+                            int64_t decay_periods = elapsed / ACCUMULATOR_DECAY_PERIOD_MS;
+                            if (decay_periods > 0) {
+                                uint32_t timeout_periods = data->temp_layer_activation_timeout_ms /
+                                                           ACCUMULATOR_DECAY_PERIOD_MS;
+                                int32_t decay_per_period =
+                                    timeout_periods > 0
+                                        ? data->temp_layer_activation_threshold / timeout_periods
+                                        : data->temp_layer_activation_threshold;
+                                if (decay_per_period < 1) {
+                                    decay_per_period = 1;
+                                }
+                                int32_t total_decay = decay_per_period * (int32_t)decay_periods;
+                                if (data->temp_layer_activation_accum > 0) {
+                                    data->temp_layer_activation_accum -= total_decay;
+                                    if (data->temp_layer_activation_accum < 0) {
+                                        data->temp_layer_activation_accum = 0;
+                                    }
+                                } else if (data->temp_layer_activation_accum < 0) {
+                                    data->temp_layer_activation_accum += total_decay;
+                                    if (data->temp_layer_activation_accum > 0) {
+                                        data->temp_layer_activation_accum = 0;
+                                    }
+                                }
+                                data->temp_layer_activation_last_decay_timestamp = now;
+                                LOG_DBG("Temp-layer activation: decayed accum to %d",
+                                        data->temp_layer_activation_accum);
+                            }
+                        }
+                    }
+
+                    // Accumulate signed movement (vibration oscillates +/- and cancels out)
+                    data->temp_layer_activation_accum += (int32_t)event->value;
+                    data->temp_layer_activation_last_decay_timestamp = now;
+
+                    // Check absolute value against threshold
+                    int32_t abs_accum = data->temp_layer_activation_accum < 0
+                                            ? -data->temp_layer_activation_accum
+                                            : data->temp_layer_activation_accum;
+                    if (abs_accum < data->temp_layer_activation_threshold) {
                         threshold_met = false;
                         LOG_DBG("Temp-layer activation suppressed: accum=%d, threshold=%d",
                                 data->temp_layer_activation_accum,
@@ -405,16 +453,18 @@ static int runtime_processor_handle_event(const struct device *dev, struct input
             int64_t elapsed = now - data->axis_snap_last_decay_timestamp;
             if (elapsed > 0) {
                 // Decay rate: threshold per timeout period
-                // Decay every 50ms
-                int64_t decay_periods = elapsed / 50;
+                int64_t decay_periods = elapsed / ACCUMULATOR_DECAY_PERIOD_MS;
                 if (decay_periods > 0) {
-                    int16_t decay_per_50ms =
-                        data->axis_snap_threshold / (data->axis_snap_timeout_ms / 50);
-                    if (decay_per_50ms < 1) {
-                        decay_per_50ms = 1; // Minimum decay of 1
+                    uint32_t timeout_periods =
+                        data->axis_snap_timeout_ms / ACCUMULATOR_DECAY_PERIOD_MS;
+                    int16_t decay_per_period = timeout_periods > 0
+                                                   ? data->axis_snap_threshold / timeout_periods
+                                                   : data->axis_snap_threshold;
+                    if (decay_per_period < 1) {
+                        decay_per_period = 1; // Minimum decay of 1
                     }
 
-                    int16_t total_decay = decay_per_50ms * decay_periods;
+                    int16_t total_decay = decay_per_period * (int16_t)decay_periods;
 
                     // Decay towards zero
                     if (data->axis_snap_cross_axis_accum > 0) {
@@ -521,6 +571,7 @@ struct processor_settings {
     bool x_invert;
     bool y_invert;
     uint16_t temp_layer_activation_threshold;
+    uint16_t temp_layer_activation_timeout_ms;
 };
 
 static void save_processor_settings_work_handler(struct k_work *work) {
@@ -547,6 +598,7 @@ static void save_processor_settings_work_handler(struct k_work *work) {
         .x_invert = data->persistent_x_invert,
         .y_invert = data->persistent_y_invert,
         .temp_layer_activation_threshold = data->persistent_temp_layer_activation_threshold,
+        .temp_layer_activation_timeout_ms = data->persistent_temp_layer_activation_timeout_ms,
     };
 
     char path[64];
@@ -594,6 +646,8 @@ static int load_processor_settings_cb(const char *name, size_t len, settings_rea
             data->persistent_y_invert = settings.y_invert;
             data->persistent_temp_layer_activation_threshold =
                 settings.temp_layer_activation_threshold;
+            data->persistent_temp_layer_activation_timeout_ms =
+                settings.temp_layer_activation_timeout_ms;
 
             // Apply to current values
             data->scale_multiplier = settings.scale_multiplier;
@@ -612,6 +666,7 @@ static int load_processor_settings_cb(const char *name, size_t len, settings_rea
             data->x_invert = settings.x_invert;
             data->y_invert = settings.y_invert;
             data->temp_layer_activation_threshold = settings.temp_layer_activation_threshold;
+            data->temp_layer_activation_timeout_ms = settings.temp_layer_activation_timeout_ms;
             update_rotation_values(data);
 
             LOG_INF("Loaded settings for %s: scale=%d/%d, rotation=%d, "
@@ -699,7 +754,11 @@ static int runtime_processor_init(const struct device *dev) {
     // Initialize temp-layer activation threshold from DT defaults
     data->temp_layer_activation_threshold = cfg->initial_temp_layer_activation_threshold;
     data->persistent_temp_layer_activation_threshold = cfg->initial_temp_layer_activation_threshold;
+    data->temp_layer_activation_timeout_ms = cfg->initial_temp_layer_activation_timeout_ms;
+    data->persistent_temp_layer_activation_timeout_ms =
+        cfg->initial_temp_layer_activation_timeout_ms;
     data->temp_layer_activation_accum = 0;
+    data->temp_layer_activation_last_decay_timestamp = 0;
 
     update_rotation_values(data);
 
@@ -842,7 +901,11 @@ int zmk_input_processor_runtime_reset(const struct device *dev) {
     // Reset temp-layer activation threshold to defaults
     data->temp_layer_activation_threshold = cfg->initial_temp_layer_activation_threshold;
     data->persistent_temp_layer_activation_threshold = cfg->initial_temp_layer_activation_threshold;
+    data->temp_layer_activation_timeout_ms = cfg->initial_temp_layer_activation_timeout_ms;
+    data->persistent_temp_layer_activation_timeout_ms =
+        cfg->initial_temp_layer_activation_timeout_ms;
     data->temp_layer_activation_accum = 0;
+    data->temp_layer_activation_last_decay_timestamp = 0;
 
     update_rotation_values(data);
 
@@ -916,6 +979,8 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         config->x_invert = data->persistent_x_invert;
         config->y_invert = data->persistent_y_invert;
         config->temp_layer_activation_threshold = data->persistent_temp_layer_activation_threshold;
+        config->temp_layer_activation_timeout_ms =
+            data->persistent_temp_layer_activation_timeout_ms;
     }
 
     return 0;
@@ -974,6 +1039,8 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         .initial_y_invert = DT_INST_PROP(n, y_invert),                                             \
         .initial_temp_layer_activation_threshold =                                                 \
             DT_INST_PROP_OR(n, temp_layer_activation_threshold, 0),                                \
+        .initial_temp_layer_activation_timeout_ms =                                                \
+            DT_INST_PROP_OR(n, temp_layer_activation_timeout_ms, 0),                               \
     };                                                                                             \
     static struct runtime_processor_data runtime_data_##n;                                         \
     DEVICE_DT_INST_DEFINE(n, &runtime_processor_init, NULL, &runtime_data_##n,                     \
@@ -1069,8 +1136,9 @@ static int keycode_state_changed_listener(const zmk_event_t *eh) {
         const struct device *dev = runtime_processors[i];
         struct runtime_processor_data *data = dev->data;
         data->last_keypress_timestamp = now;
-        // Reset activation accumulator on keypress to suppress accidental activation
+        // Reset activation accumulator and decay timestamp on keypress
         data->temp_layer_activation_accum = 0;
+        data->temp_layer_activation_last_decay_timestamp = 0;
     }
 
     return ZMK_EV_EVENT_BUBBLE;
@@ -1616,6 +1684,37 @@ int zmk_input_processor_runtime_set_temp_layer_activation_threshold(const struct
     }
 
     LOG_INF("Temp-layer activation threshold: %d%s", threshold,
+            persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_temp_layer_activation_timeout(const struct device *dev,
+                                                                  uint16_t timeout_ms,
+                                                                  bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->temp_layer_activation_timeout_ms = timeout_ms;
+    // Reset accumulator and decay timestamp when timeout changes
+    data->temp_layer_activation_accum = 0;
+    data->temp_layer_activation_last_decay_timestamp = 0;
+
+    if (persistent) {
+        data->persistent_temp_layer_activation_timeout_ms = timeout_ms;
+    }
+
+    LOG_INF("Temp-layer activation timeout: %d ms%s", timeout_ms,
             persistent ? " (persistent)" : " (temporary)");
 
     int ret = 0;
