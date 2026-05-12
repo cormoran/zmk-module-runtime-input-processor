@@ -64,12 +64,11 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
     // Then use it in your input device configuration
     my_input_listener {
         // ... other config ...
-        input-processors = <&mouse_runtime_input_processor>;
-
-        scroller {
-			// layers = <9>;
-			input-processors = <&zip_xy_to_scroll_mapper &scroll_runtime_input_processor>;
-		};
+        // Include both processors and the scroll mapper in the chain.
+        // Use active-layers on each processor (via web UI or device tree) to
+        // enable mouse_runtime_input_processor on pointer layers and
+        // scroll_runtime_input_processor on scroll layers.
+        input-processors = <&mouse_runtime_input_processor &zip_xy_to_scroll_mapper &scroll_runtime_input_processor>;
     };
 
     // For split keyboard, you can configure input processor in central
