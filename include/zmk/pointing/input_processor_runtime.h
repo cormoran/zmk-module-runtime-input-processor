@@ -42,6 +42,8 @@ struct zmk_input_processor_runtime_config {
     // Axis reverse settings
     bool x_invert; // Whether to invert X axis
     bool y_invert; // Whether to invert Y axis
+    // Pending changes tracking
+    bool has_pending_changes; // Whether there are unsaved changes
 };
 
 /**
@@ -300,3 +302,25 @@ int zmk_input_processor_runtime_set_x_invert(const struct device *dev, bool inve
  */
 int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool invert,
                                              bool persistent);
+
+/**
+ * @brief Cancel scheduled save and mark processor as having pending changes
+ *
+ * This function is used when settings are updated but should not be saved to
+ * flash immediately. It cancels any scheduled save operation and marks the
+ * processor as having pending changes that need to be saved later.
+ *
+ * @param dev Pointer to the device structure
+ */
+void zmk_input_processor_runtime_cancel_save_and_mark_pending(const struct device *dev);
+
+/**
+ * @brief Save all pending changes to persistent storage
+ *
+ * This function immediately saves all pending changes to flash storage,
+ * bypassing the normal debounce delay.
+ *
+ * @param dev Pointer to the device structure
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_save_all_pending(const struct device *dev);
