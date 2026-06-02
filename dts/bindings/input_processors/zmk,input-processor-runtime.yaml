@@ -132,3 +132,19 @@ properties:
   y-invert:
     type: boolean
     description: If present, invert Y axis values (positive becomes negative and vice versa)
+
+  temp-layer-activation-threshold:
+    type: int
+    default: 0
+    description: |
+      Minimum cumulative signed movement required to activate temp-layer (0 = disabled).
+      Uses signed accumulation so that oscillating vibration (alternating +/-) cancels out,
+      while intentional directional movement accumulates past the threshold.
+
+  temp-layer-activation-timeout-ms:
+    type: int
+    default: 0
+    description: |
+      Time window (ms) over which the activation accumulator decays back toward zero
+      (0 = no decay). When set, the accumulator decreases at a rate of threshold/timeout
+      per millisecond, so brief vibrations decay away before the threshold is reached.

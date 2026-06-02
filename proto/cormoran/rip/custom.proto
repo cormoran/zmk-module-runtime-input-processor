@@ -33,6 +33,10 @@ message InputProcessorInfo {
     // Axis invert settings
     bool x_invert = 16; // Whether to invert X axis
     bool y_invert = 17; // Whether to invert Y axis
+    // Temp-layer activation threshold (0 = disabled)
+    uint32 temp_layer_activation_threshold =
+        18; // Minimum cumulative signed movement required to activate temp-layer
+    uint32 temp_layer_activation_timeout_ms = 19; // Time window for threshold decay (0 = no decay)
 }
 
 message ListInputProcessorsRequest {
@@ -205,6 +209,25 @@ message SetYInvertResponse {
     // Empty - use notification to report changes
 }
 
+message SetTempLayerActivationThresholdRequest {
+    uint32 id = 1; // ID of the input processor to update
+    uint32 threshold =
+        2; // Minimum cumulative signed movement to activate temp-layer (0 = disabled)
+}
+
+message SetTempLayerActivationThresholdResponse {
+    // Empty - use notification to report changes
+}
+
+message SetTempLayerActivationTimeoutRequest {
+    uint32 id = 1;         // ID of the input processor to update
+    uint32 timeout_ms = 2; // Time window for threshold decay (0 = no decay)
+}
+
+message SetTempLayerActivationTimeoutResponse {
+    // Empty - use notification to report changes
+}
+
 message Request {
     oneof request_type {
         ListInputProcessorsRequest list_input_processors = 1;
@@ -226,6 +249,8 @@ message Request {
         SetXySwapEnabledRequest set_xy_swap_enabled = 17;
         SetXInvertRequest set_x_invert = 18;
         SetYInvertRequest set_y_invert = 19;
+        SetTempLayerActivationThresholdRequest set_temp_layer_activation_threshold = 20;
+        SetTempLayerActivationTimeoutRequest set_temp_layer_activation_timeout = 21;
     }
 }
 
@@ -253,6 +278,8 @@ message Response {
         SetXySwapEnabledResponse set_xy_swap_enabled = 18;
         SetXInvertResponse set_x_invert = 19;
         SetYInvertResponse set_y_invert = 20;
+        SetTempLayerActivationThresholdResponse set_temp_layer_activation_threshold = 21;
+        SetTempLayerActivationTimeoutResponse set_temp_layer_activation_timeout = 22;
     }
 }
 
