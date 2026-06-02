@@ -132,3 +132,36 @@ properties:
   y-invert:
     type: boolean
     description: If present, invert Y axis values (positive becomes negative and vice versa)
+
+  keybind-behaviors:
+    type: phandle-array
+    description: |
+      Array of behaviors to trigger based on movement direction (up to 8).
+      The 2D space is divided based on the number of behaviors configured.
+      For example, with 4 behaviors, each gets 90 degrees: right, left, down, up.
+
+  keybind-enabled:
+    type: boolean
+    description: If present, keybind mode is enabled by default
+
+  keybind-behavior-count:
+    type: int
+    default: 4
+    description: |
+      Number of behaviors to use from keybind-behaviors array (1-8).
+      This determines how the 2D space is divided.
+
+  keybind-degree-offset:
+    type: int
+    default: 0
+    description: |
+      Degree offset to rotate the 2D space division (0-359).
+      For example, with 2 behaviors and offset=0, y>0 and y<0 are assigned.
+      With offset=90, x>0 and x<0 are assigned instead.
+
+  keybind-tick:
+    type: int
+    default: 10
+    description: |
+      Movement units required per activation (tick threshold).
+      Higher values make the keybind less sensitive.

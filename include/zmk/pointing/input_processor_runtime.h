@@ -42,6 +42,11 @@ struct zmk_input_processor_runtime_config {
     // Axis reverse settings
     bool x_invert; // Whether to invert X axis
     bool y_invert; // Whether to invert Y axis
+    // Keybind settings
+    bool keybind_enabled;           // Whether keybind mode is enabled
+    uint8_t keybind_behavior_count; // Number of behaviors to use (1-8)
+    uint16_t keybind_degree_offset; // Rotation offset for 2D division (0-359)
+    uint16_t keybind_tick;          // Movement threshold for triggering
 };
 
 /**
@@ -300,3 +305,47 @@ int zmk_input_processor_runtime_set_x_invert(const struct device *dev, bool inve
  */
 int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool invert,
                                              bool persistent);
+
+/**
+ * @brief Set keybind enabled state
+ *
+ * @param dev Pointer to the device structure
+ * @param enabled Whether keybind mode is enabled
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_keybind_enabled(const struct device *dev, bool enabled,
+                                                    bool persistent);
+
+/**
+ * @brief Set keybind behavior count
+ *
+ * @param dev Pointer to the device structure
+ * @param count Number of behaviors to use (1-8)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_keybind_behavior_count(const struct device *dev, uint8_t count,
+                                                           bool persistent);
+
+/**
+ * @brief Set keybind degree offset
+ *
+ * @param dev Pointer to the device structure
+ * @param degree_offset Rotation offset for 2D space division (0-359 degrees)
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_keybind_degree_offset(const struct device *dev,
+                                                          uint16_t degree_offset, bool persistent);
+
+/**
+ * @brief Set keybind tick threshold
+ *
+ * @param dev Pointer to the device structure
+ * @param tick Movement units required per activation
+ * @param persistent If true, save to persistent storage; if false, temporary
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_keybind_tick(const struct device *dev, uint16_t tick,
+                                                 bool persistent);

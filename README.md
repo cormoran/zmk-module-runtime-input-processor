@@ -10,6 +10,7 @@ This ZMK module provides runtime configurable input processors for pointing devi
 - **Rotation Support**: Apply rotation transformations in degrees (fully implemented with paired X/Y handling)
 - **Axis Reversing**: Invert X and/or Y axis independently to reverse input direction
 - **Axis Snapping**: Lock scrolling to X or Y axis with threshold-based unlock
+- **Keybind Mode**: Convert 2D movement into directional behavior triggers (gesture-based controls)
 - **Temp-Layer Layer**: Automatically activate a layer when using pointing device, deactivate on key press or timeout
 - **Active Layers**: Specify which layers the processor should be active on using a bitmask
 - **Temporary Changes**: Hold a key to temporarily change settings (perfect for DPI toggle)
@@ -385,6 +386,53 @@ When you press and hold the snap behavior key:
 1. Current snap settings are saved
 2. Temporary snap settings are applied (with 1000ms timeout)
 3. When you release the key, original settings are restored
+
+### Keybind Mode
+
+The keybind mode converts 2D input movement into directional behavior triggers, enabling gesture-based controls. When enabled, movement in different directions triggers configured behaviors instead of producing movement output.
+
+**Key Features:**
+- Support for 1-8 behaviors (directional triggers)
+- Space division: 1=any direction, 2=180° each, 4=90° each, 8=45° each
+- Adjustable degree offset to rotate the division
+- Configurable tick threshold for sensitivity
+- Runtime configuration via Web UI
+
+**Example Configuration:**
+
+```dts
+#include <dt-bindings/zmk/input.h>
+
+trackpad_keybind: trackpad_keybind {
+    compatible = "zmk,input-processor-runtime";
+    processor-label = "tpkb";
+    type = <INPUT_EV_REL>;
+    x-codes = <INPUT_REL_X>;
+    y-codes = <INPUT_REL_Y>;
+
+    // 4-way directional gestures
+    keybind-enabled;
+    keybind-behaviors = <&kp UP &kp LEFT &kp DOWN &kp RIGHT>;
+    keybind-behavior-count = <4>;
+    keybind-degree-offset = <45>;  // Diagonal directions
+    keybind-tick = <20>;  // Movement threshold
+
+    #input-processor-cells = <0>;
+};
+```
+
+**Use Cases:**
+- Directional navigation (swipe to move cursor)
+- Scroll control (horizontal/vertical gestures)
+- Volume/brightness control
+- Layer switching via gestures
+- Custom macros triggered by swipe direction
+
+For detailed examples and configuration guide, see [KEYBIND_EXAMPLE.md](./KEYBIND_EXAMPLE.md).
+
+**Special Thanks:**
+
+This feature was inspired by [zettaface/zmk-input-processor-keybind](https://github.com/zettaface/zmk-input-processor-keybind), which pioneered the concept of converting trackball movement to key presses in ZMK. Our implementation extends this idea with runtime configurability and web-based settings management.
 
 ## Development Guide
 

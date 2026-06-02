@@ -122,6 +122,12 @@ export function InputProcessorManager() {
   const [xInvert, setXInvert] = useState<boolean>(false);
   const [yInvert, setYInvert] = useState<boolean>(false);
 
+  // Keybind state
+  const [keybindEnabled, setKeybindEnabled] = useState<boolean>(false);
+  const [keybindBehaviorCount, setKeybindBehaviorCount] = useState<number>(1);
+  const [keybindDegreeOffset, setKeybindDegreeOffset] = useState<number>(0);
+  const [keybindTick, setKeybindTick] = useState<number>(20);
+
   const subsystem = useMemo(
     () => zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -437,6 +443,70 @@ export function InputProcessorManager() {
         }
       }
 
+      if (currentProcessor.keybindEnabled !== keybindEnabled) {
+        const keybindEnabledRequest = Request.create({
+          setKeybindEnabled: {
+            id: selectedProcessorId,
+            enabled: keybindEnabled,
+          },
+        });
+        const keybindEnabledResp = await callRPC(keybindEnabledRequest);
+        if (keybindEnabledResp?.error) {
+          setError(keybindEnabledResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      if (currentProcessor.keybindBehaviorCount !== keybindBehaviorCount) {
+        const keybindBehaviorCountRequest = Request.create({
+          setKeybindBehaviorCount: {
+            id: selectedProcessorId,
+            count: keybindBehaviorCount,
+          },
+        });
+        const keybindBehaviorCountResp = await callRPC(
+          keybindBehaviorCountRequest
+        );
+        if (keybindBehaviorCountResp?.error) {
+          setError(keybindBehaviorCountResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      if (currentProcessor.keybindDegreeOffset !== keybindDegreeOffset) {
+        const keybindDegreeOffsetRequest = Request.create({
+          setKeybindDegreeOffset: {
+            id: selectedProcessorId,
+            offset: keybindDegreeOffset,
+          },
+        });
+        const keybindDegreeOffsetResp = await callRPC(
+          keybindDegreeOffsetRequest
+        );
+        if (keybindDegreeOffsetResp?.error) {
+          setError(keybindDegreeOffsetResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      if (currentProcessor.keybindTick !== keybindTick) {
+        const keybindTickRequest = Request.create({
+          setKeybindTick: {
+            id: selectedProcessorId,
+            tick: keybindTick,
+          },
+        });
+        const keybindTickResp = await callRPC(keybindTickRequest);
+        if (keybindTickResp?.error) {
+          setError(keybindTickResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // Updates will come via notifications
     } catch (err) {
       setError(
@@ -465,6 +535,10 @@ export function InputProcessorManager() {
     xySwapEnabled,
     xInvert,
     yInvert,
+    keybindEnabled,
+    keybindBehaviorCount,
+    keybindDegreeOffset,
+    keybindTick,
   ]);
 
   const selectProcessor = useCallback(
@@ -487,6 +561,10 @@ export function InputProcessorManager() {
         setXySwapEnabled(proc.xySwapEnabled);
         setXInvert(proc.xInvert);
         setYInvert(proc.yInvert);
+        setKeybindEnabled(proc.keybindEnabled);
+        setKeybindBehaviorCount(proc.keybindBehaviorCount);
+        setKeybindDegreeOffset(proc.keybindDegreeOffset);
+        setKeybindTick(proc.keybindTick);
       }
     },
     [processors]
@@ -546,6 +624,10 @@ export function InputProcessorManager() {
               setXySwapEnabled(proc.xySwapEnabled);
               setXInvert(proc.xInvert);
               setYInvert(proc.yInvert);
+              setKeybindEnabled(proc.keybindEnabled);
+              setKeybindBehaviorCount(proc.keybindBehaviorCount);
+              setKeybindDegreeOffset(proc.keybindDegreeOffset);
+              setKeybindTick(proc.keybindTick);
             }
 
             // If no processor is selected yet, select the first one
@@ -566,6 +648,10 @@ export function InputProcessorManager() {
               setXySwapEnabled(proc.xySwapEnabled);
               setXInvert(proc.xInvert);
               setYInvert(proc.yInvert);
+              setKeybindEnabled(proc.keybindEnabled);
+              setKeybindBehaviorCount(proc.keybindBehaviorCount);
+              setKeybindDegreeOffset(proc.keybindDegreeOffset);
+              setKeybindTick(proc.keybindTick);
             }
           }
         } catch (err) {
@@ -1100,6 +1186,118 @@ export function InputProcessorManager() {
               Reverse vertical input direction
             </div>
           </div>
+
+          <hr style={{ margin: "1.5rem 0", border: "1px solid #e0e0e0" }} />
+
+          <h3>Keybind Mode</h3>
+          <p style={{ fontSize: "0.9em", color: "#666", marginBottom: "1rem" }}>
+            Convert 2D movement into directional behavior triggers for
+            gesture-based controls
+          </p>
+
+          <div className="input-group">
+            <label htmlFor="keybind-enabled">
+              <input
+                id="keybind-enabled"
+                type="checkbox"
+                checked={keybindEnabled}
+                onChange={(e) => setKeybindEnabled(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Enable Keybind Mode
+            </label>
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+                marginLeft: "1.7rem",
+              }}
+            >
+              Enable gesture-based directional controls
+            </div>
+          </div>
+
+          {keybindEnabled && (
+            <>
+              <div className="input-group">
+                <label htmlFor="keybind-behavior-count">Behavior Count:</label>
+                <select
+                  id="keybind-behavior-count"
+                  value={keybindBehaviorCount}
+                  onChange={(e) =>
+                    setKeybindBehaviorCount(parseInt(e.target.value) || 1)
+                  }
+                  style={{ padding: "0.5rem", fontSize: "1rem" }}
+                >
+                  {[1, 2, 4, 8].map((count) => (
+                    <option key={count} value={count}>
+                      {count} direction{count > 1 ? "s" : ""} (
+                      {count === 1 ? "any" : `${360 / count}°`} each)
+                    </option>
+                  ))}
+                </select>
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Number of directional behaviors (1-8)
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="keybind-degree-offset">
+                  Degree Offset (0-359°):
+                </label>
+                <input
+                  id="keybind-degree-offset"
+                  type="number"
+                  min="0"
+                  max="359"
+                  value={keybindDegreeOffset}
+                  onChange={(e) =>
+                    setKeybindDegreeOffset(parseInt(e.target.value) || 0)
+                  }
+                />
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Rotate the direction divisions (0-359 degrees)
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="keybind-tick">Tick Threshold:</label>
+                <input
+                  id="keybind-tick"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  step="5"
+                  value={keybindTick}
+                  onChange={(e) =>
+                    setKeybindTick(parseInt(e.target.value) || 20)
+                  }
+                />
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Movement units required per activation (sensitivity)
+                </div>
+              </div>
+            </>
+          )}
 
           <button
             className="btn btn-primary"

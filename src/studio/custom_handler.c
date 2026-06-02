@@ -74,6 +74,14 @@ static int handle_set_x_invert(const cormoran_rip_SetXInvertRequest *req,
                                cormoran_rip_Response *resp);
 static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
                                cormoran_rip_Response *resp);
+static int handle_set_keybind_enabled(const cormoran_rip_SetKeybindEnabledRequest *req,
+                                      cormoran_rip_Response *resp);
+static int handle_set_keybind_behavior_count(const cormoran_rip_SetKeybindBehaviorCountRequest *req,
+                                             cormoran_rip_Response *resp);
+static int handle_set_keybind_degree_offset(const cormoran_rip_SetKeybindDegreeOffsetRequest *req,
+                                            cormoran_rip_Response *resp);
+static int handle_set_keybind_tick(const cormoran_rip_SetKeybindTickRequest *req,
+                                   cormoran_rip_Response *resp);
 
 /**
  * Main request handler for the custom RPC subsystem.
@@ -151,11 +159,24 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         break;
     case cormoran_rip_Request_set_xy_swap_enabled_tag:
         rc = handle_set_xy_swap_enabled(&req.request_type.set_xy_swap_enabled, resp);
+        break;
     case cormoran_rip_Request_set_x_invert_tag:
         rc = handle_set_x_invert(&req.request_type.set_x_invert, resp);
         break;
     case cormoran_rip_Request_set_y_invert_tag:
         rc = handle_set_y_invert(&req.request_type.set_y_invert, resp);
+        break;
+    case cormoran_rip_Request_set_keybind_enabled_tag:
+        rc = handle_set_keybind_enabled(&req.request_type.set_keybind_enabled, resp);
+        break;
+    case cormoran_rip_Request_set_keybind_behavior_count_tag:
+        rc = handle_set_keybind_behavior_count(&req.request_type.set_keybind_behavior_count, resp);
+        break;
+    case cormoran_rip_Request_set_keybind_degree_offset_tag:
+        rc = handle_set_keybind_degree_offset(&req.request_type.set_keybind_degree_offset, resp);
+        break;
+    case cormoran_rip_Request_set_keybind_tick_tag:
+        rc = handle_set_keybind_tick(&req.request_type.set_keybind_tick, resp);
         break;
     default:
         LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -261,6 +282,10 @@ static int handle_get_input_processor(const cormoran_rip_GetInputProcessorReques
     result.processor.axis_snap_timeout_ms = config.axis_snap_timeout_ms;
     result.processor.x_invert = config.x_invert;
     result.processor.y_invert = config.y_invert;
+    result.processor.keybind_enabled = config.keybind_enabled;
+    result.processor.keybind_behavior_count = config.keybind_behavior_count;
+    result.processor.keybind_degree_offset = config.keybind_degree_offset;
+    result.processor.keybind_tick = config.keybind_tick;
 
     resp->which_response_type = cormoran_rip_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -789,6 +814,118 @@ static int handle_set_xy_swap_enabled(const cormoran_rip_SetXySwapEnabledRequest
     resp->which_response_type = cormoran_rip_Response_set_xy_swap_enabled_tag;
     resp->response_type.set_xy_swap_enabled =
         (cormoran_rip_SetXySwapEnabledResponse)cormoran_rip_SetXySwapEnabledResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting keybind enabled
+ */
+static int handle_set_keybind_enabled(const cormoran_rip_SetKeybindEnabledRequest *req,
+                                      cormoran_rip_Response *resp) {
+    LOG_DBG("Setting keybind enabled for id=%d to %d", req->id, req->enabled);
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set keybind enabled (persistent)
+    int ret = zmk_input_processor_runtime_set_keybind_enabled(dev, req->enabled, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set keybind enabled: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_keybind_enabled_tag;
+    resp->response_type.set_keybind_enabled =
+        (cormoran_rip_SetKeybindEnabledResponse)cormoran_rip_SetKeybindEnabledResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting keybind behavior count
+ */
+static int handle_set_keybind_behavior_count(const cormoran_rip_SetKeybindBehaviorCountRequest *req,
+                                             cormoran_rip_Response *resp) {
+    LOG_DBG("Setting keybind behavior count for id=%d to %d", req->id, req->count);
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set keybind behavior count (persistent)
+    int ret = zmk_input_processor_runtime_set_keybind_behavior_count(dev, req->count, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set keybind behavior count: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_keybind_behavior_count_tag;
+    resp->response_type.set_keybind_behavior_count = (cormoran_rip_SetKeybindBehaviorCountResponse)
+        cormoran_rip_SetKeybindBehaviorCountResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting keybind degree offset
+ */
+static int handle_set_keybind_degree_offset(const cormoran_rip_SetKeybindDegreeOffsetRequest *req,
+                                            cormoran_rip_Response *resp) {
+    LOG_DBG("Setting keybind degree offset for id=%d to %d", req->id, req->offset);
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set keybind degree offset (persistent)
+    int ret = zmk_input_processor_runtime_set_keybind_degree_offset(dev, req->offset, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set keybind degree offset: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_keybind_degree_offset_tag;
+    resp->response_type.set_keybind_degree_offset = (cormoran_rip_SetKeybindDegreeOffsetResponse)
+        cormoran_rip_SetKeybindDegreeOffsetResponse_init_zero;
+
+    return 0;
+}
+
+/**
+ * Handle setting keybind tick
+ */
+static int handle_set_keybind_tick(const cormoran_rip_SetKeybindTickRequest *req,
+                                   cormoran_rip_Response *resp) {
+    LOG_DBG("Setting keybind tick for id=%d to %d", req->id, req->tick);
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    // Set keybind tick (persistent)
+    int ret = zmk_input_processor_runtime_set_keybind_tick(dev, req->tick, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to set keybind tick: %d", ret);
+        return ret;
+    }
+
+    // Return empty response
+    resp->which_response_type = cormoran_rip_Response_set_keybind_tick_tag;
+    resp->response_type.set_keybind_tick =
+        (cormoran_rip_SetKeybindTickResponse)cormoran_rip_SetKeybindTickResponse_init_zero;
 
     return 0;
 }

@@ -29,6 +29,12 @@
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define MAX_KEYBIND_BEHAVIORS 8
+
 struct runtime_processor_config {
     const char *name;
     uint8_t type;
@@ -61,6 +67,13 @@ struct runtime_processor_config {
     // Axis reverse default settings from DT
     bool initial_x_invert;
     bool initial_y_invert;
+    // Keybind default settings from DT
+    const char **keybind_behaviors;
+    size_t keybind_behaviors_len;
+    bool initial_keybind_enabled;
+    uint8_t initial_keybind_behavior_count;
+    uint16_t initial_keybind_degree_offset;
+    uint16_t initial_keybind_tick;
 };
 
 struct runtime_processor_data {
@@ -134,6 +147,22 @@ struct runtime_processor_data {
     bool persistent_x_invert;
     bool persistent_y_invert;
 
+    // Keybind settings
+    bool keybind_enabled;
+    uint8_t keybind_behavior_count;
+    uint16_t keybind_degree_offset;
+    uint16_t keybind_tick;
+
+    // Persistent keybind settings
+    bool persistent_keybind_enabled;
+    uint8_t persistent_keybind_behavior_count;
+    uint16_t persistent_keybind_degree_offset;
+    uint16_t persistent_keybind_tick;
+
+    // Keybind runtime state
+    int32_t keybind_x_accum;
+    int32_t keybind_y_accum;
+
     // Temp-layer runtime state
     struct k_work_delayable temp_layer_activation_work;
     struct k_work_delayable temp_layer_deactivation_work;
@@ -151,7 +180,7 @@ static void update_rotation_values(struct runtime_processor_data *data) {
     }
 
     // Convert degrees to radians and compute sin/cos
-    double angle_rad = (double)data->rotation_degrees * 3.14159265359 / 180.0;
+    double angle_rad = (double)data->rotation_degrees * M_PI / 180.0;
     data->cos_val = (int32_t)(cos(angle_rad) * 1000.0);
     data->sin_val = (int32_t)(sin(angle_rad) * 1000.0);
 
@@ -235,6 +264,143 @@ static bool is_processor_active_for_current_layers(uint32_t active_layers_mask) 
     return false;
 }
 
+// Helper function to trigger keybind behavior
+static int trigger_keybind_behavior(const struct device *dev, uint8_t behavior_idx) {
+    const struct runtime_processor_config *cfg = dev->config;
+
+    if (behavior_idx >= cfg->keybind_behaviors_len) {
+        LOG_ERR("Keybind behavior index %d out of range (max %d)", behavior_idx,
+                cfg->keybind_behaviors_len - 1);
+        return -EINVAL;
+    }
+
+    const char *behavior_name = cfg->keybind_behaviors[behavior_idx];
+    if (!behavior_name) {
+        LOG_ERR("Keybind behavior at index %d is NULL", behavior_idx);
+        return -EINVAL;
+    }
+
+    const struct device *behavior_dev = zmk_behavior_get_binding(behavior_name);
+    if (!behavior_dev) {
+        LOG_ERR("Failed to get behavior device for '%s'", behavior_name);
+        return -ENODEV;
+    }
+
+    struct zmk_behavior_binding binding = {
+        .behavior_dev = behavior_name,
+        .param1 = 0,
+        .param2 = 0,
+    };
+
+    struct zmk_behavior_binding_event binding_event = {
+        .layer = zmk_keymap_highest_layer_active(),
+        .position = 0,
+        .timestamp = k_uptime_get(),
+    };
+
+    // Press the behavior
+    int ret = zmk_behavior_invoke_binding(&binding, binding_event, true);
+    if (ret < 0) {
+        LOG_ERR("Failed to invoke behavior press for '%s': %d", behavior_name, ret);
+        return ret;
+    }
+
+    LOG_INF("Triggered keybind behavior %d (%s)", behavior_idx, behavior_name);
+
+    // Release the behavior immediately
+    ret = zmk_behavior_invoke_binding(&binding, binding_event, false);
+    if (ret < 0) {
+        LOG_ERR("Failed to invoke behavior release for '%s': %d", behavior_name, ret);
+    }
+
+    return 0;
+}
+
+// Helper function to process keybind logic
+// Returns true if event was consumed by keybind, false if should continue processing
+static bool process_keybind(const struct device *dev, bool is_x, int16_t value) {
+    const struct runtime_processor_config *cfg = dev->config;
+    struct runtime_processor_data *data = dev->data;
+
+    if (!data->keybind_enabled || data->keybind_behavior_count == 0 ||
+        cfg->keybind_behaviors_len == 0) {
+        return false;
+    }
+
+    // Clamp behavior count to available behaviors
+    uint8_t behavior_count = data->keybind_behavior_count;
+    if (behavior_count > cfg->keybind_behaviors_len) {
+        behavior_count = cfg->keybind_behaviors_len;
+    }
+    if (behavior_count > MAX_KEYBIND_BEHAVIORS) {
+        behavior_count = MAX_KEYBIND_BEHAVIORS;
+    }
+
+    // Accumulate X and Y movement
+    if (is_x) {
+        data->keybind_x_accum += value;
+    } else {
+        data->keybind_y_accum += value;
+    }
+
+    // Check if accumulated movement exceeds tick threshold
+    int32_t total_movement_sq = data->keybind_x_accum * data->keybind_x_accum +
+                                data->keybind_y_accum * data->keybind_y_accum;
+    int32_t tick_threshold_sq = data->keybind_tick * data->keybind_tick;
+
+    if (total_movement_sq < tick_threshold_sq) {
+        // Not enough movement yet, consume the event
+        return true;
+    }
+
+    // Calculate angle from accumulated X/Y
+    // atan2(y, x) returns angle in radians from -PI to PI
+    // We convert to degrees 0-360
+    double angle_rad = atan2((double)data->keybind_y_accum, (double)data->keybind_x_accum);
+    double angle_deg = angle_rad * 180.0 / M_PI;
+    if (angle_deg < 0) {
+        angle_deg += 360.0;
+    }
+
+    // Apply degree offset
+    angle_deg += data->keybind_degree_offset;
+    if (angle_deg >= 360.0) {
+        angle_deg -= 360.0;
+    }
+
+    // Calculate which behavior to trigger based on behavior count
+    // Divide 360 degrees by behavior count
+    uint8_t behavior_idx = 0;
+
+    if (behavior_count == 1) {
+        // Only one behavior, always trigger it
+        behavior_idx = 0;
+    } else {
+        // Divide circle into equal segments
+        double segment_size = 360.0 / behavior_count;
+        // Offset by half segment to center the first segment at 0 degrees
+        double adjusted_angle = angle_deg + (segment_size / 2.0);
+        if (adjusted_angle >= 360.0) {
+            adjusted_angle -= 360.0;
+        }
+        behavior_idx = (uint8_t)(adjusted_angle / segment_size) % behavior_count;
+    }
+
+    LOG_DBG("Keybind: accum=(%d,%d) angle=%.1f deg, offset=%d, behavior_idx=%d/%d",
+            data->keybind_x_accum, data->keybind_y_accum, angle_deg - data->keybind_degree_offset,
+            data->keybind_degree_offset, behavior_idx, behavior_count);
+
+    // Trigger the behavior
+    trigger_keybind_behavior(dev, behavior_idx);
+
+    // Reset accumulation
+    data->keybind_x_accum = 0;
+    data->keybind_y_accum = 0;
+
+    // Consume the event
+    return true;
+}
+
 static int scale_val(struct input_event *event, uint32_t mul, uint32_t div,
                      struct zmk_input_processor_state *state) {
     if (mul == 0 || div == 0) {
@@ -283,6 +449,12 @@ static int runtime_processor_handle_event(const struct device *dev, struct input
 
     bool is_x = (x_idx >= 0);
     int16_t value = event->value;
+
+    // Process keybind mode (if enabled, this consumes the event)
+    if (process_keybind(dev, is_x, value)) {
+        // Event was consumed by keybind, stop processing
+        return ZMK_INPUT_PROC_STOP;
+    }
 
     // Apply code mapping (XY swap and XY-to-scroll)
     // These mappings are mutually exclusive - XY-to-scroll takes precedence
@@ -409,8 +581,6 @@ static int runtime_processor_handle_event(const struct device *dev, struct input
             }
         }
 
-        bool should_unlock = false;
-
         if (is_cross_axis) {
             int16_t current_abs_accum = data->axis_snap_cross_axis_accum < 0
                                             ? -data->axis_snap_cross_axis_accum
@@ -493,6 +663,10 @@ struct processor_settings {
     bool xy_swap_enabled;
     bool x_invert;
     bool y_invert;
+    bool keybind_enabled;
+    uint8_t keybind_behavior_count;
+    uint16_t keybind_degree_offset;
+    uint16_t keybind_tick;
 };
 
 static void save_processor_settings_work_handler(struct k_work *work) {
@@ -518,6 +692,10 @@ static void save_processor_settings_work_handler(struct k_work *work) {
         .xy_swap_enabled = data->persistent_xy_swap_enabled,
         .x_invert = data->persistent_x_invert,
         .y_invert = data->persistent_y_invert,
+        .keybind_enabled = data->persistent_keybind_enabled,
+        .keybind_behavior_count = data->persistent_keybind_behavior_count,
+        .keybind_degree_offset = data->persistent_keybind_degree_offset,
+        .keybind_tick = data->persistent_keybind_tick,
     };
 
     char path[64];
@@ -563,6 +741,10 @@ static int load_processor_settings_cb(const char *name, size_t len, settings_rea
             data->persistent_xy_swap_enabled = settings.xy_swap_enabled;
             data->persistent_x_invert = settings.x_invert;
             data->persistent_y_invert = settings.y_invert;
+            data->persistent_keybind_enabled = settings.keybind_enabled;
+            data->persistent_keybind_behavior_count = settings.keybind_behavior_count;
+            data->persistent_keybind_degree_offset = settings.keybind_degree_offset;
+            data->persistent_keybind_tick = settings.keybind_tick;
 
             // Apply to current values
             data->scale_multiplier = settings.scale_multiplier;
@@ -580,6 +762,10 @@ static int load_processor_settings_cb(const char *name, size_t len, settings_rea
             data->xy_swap_enabled = settings.xy_swap_enabled;
             data->x_invert = settings.x_invert;
             data->y_invert = settings.y_invert;
+            data->keybind_enabled = settings.keybind_enabled;
+            data->keybind_behavior_count = settings.keybind_behavior_count;
+            data->keybind_degree_offset = settings.keybind_degree_offset;
+            data->keybind_tick = settings.keybind_tick;
             update_rotation_values(data);
 
             LOG_INF("Loaded settings for %s: scale=%d/%d, rotation=%d, "
@@ -663,6 +849,20 @@ static int runtime_processor_init(const struct device *dev) {
     data->y_invert = cfg->initial_y_invert;
     data->persistent_x_invert = cfg->initial_x_invert;
     data->persistent_y_invert = cfg->initial_y_invert;
+
+    // Initialize keybind settings from DT defaults
+    data->keybind_enabled = cfg->initial_keybind_enabled;
+    data->keybind_behavior_count = cfg->initial_keybind_behavior_count;
+    data->keybind_degree_offset = cfg->initial_keybind_degree_offset;
+    data->keybind_tick = cfg->initial_keybind_tick;
+    data->persistent_keybind_enabled = cfg->initial_keybind_enabled;
+    data->persistent_keybind_behavior_count = cfg->initial_keybind_behavior_count;
+    data->persistent_keybind_degree_offset = cfg->initial_keybind_degree_offset;
+    data->persistent_keybind_tick = cfg->initial_keybind_tick;
+
+    // Initialize keybind runtime state
+    data->keybind_x_accum = 0;
+    data->keybind_y_accum = 0;
 
     update_rotation_values(data);
 
@@ -802,6 +1002,18 @@ int zmk_input_processor_runtime_reset(const struct device *dev) {
     data->persistent_x_invert = cfg->initial_x_invert;
     data->persistent_y_invert = cfg->initial_y_invert;
 
+    // Reset keybind settings to defaults
+    data->keybind_enabled = cfg->initial_keybind_enabled;
+    data->keybind_behavior_count = cfg->initial_keybind_behavior_count;
+    data->keybind_degree_offset = cfg->initial_keybind_degree_offset;
+    data->keybind_tick = cfg->initial_keybind_tick;
+    data->persistent_keybind_enabled = cfg->initial_keybind_enabled;
+    data->persistent_keybind_behavior_count = cfg->initial_keybind_behavior_count;
+    data->persistent_keybind_degree_offset = cfg->initial_keybind_degree_offset;
+    data->persistent_keybind_tick = cfg->initial_keybind_tick;
+    data->keybind_x_accum = 0;
+    data->keybind_y_accum = 0;
+
     update_rotation_values(data);
 
     LOG_INF("Reset processor '%s' to defaults", cfg->name);
@@ -841,6 +1053,15 @@ void zmk_input_processor_runtime_restore_persistent(const struct device *dev) {
     data->x_invert = data->persistent_x_invert;
     data->y_invert = data->persistent_y_invert;
 
+    // Restore keybind settings
+    data->keybind_enabled = data->persistent_keybind_enabled;
+    data->keybind_behavior_count = data->persistent_keybind_behavior_count;
+    data->keybind_degree_offset = data->persistent_keybind_degree_offset;
+    data->keybind_tick = data->persistent_keybind_tick;
+    // Reset keybind state when restoring
+    data->keybind_x_accum = 0;
+    data->keybind_y_accum = 0;
+
     LOG_DBG("Restored persistent values");
 }
 
@@ -873,10 +1094,33 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         config->xy_swap_enabled = data->persistent_xy_swap_enabled;
         config->x_invert = data->persistent_x_invert;
         config->y_invert = data->persistent_y_invert;
+        config->keybind_enabled = data->persistent_keybind_enabled;
+        config->keybind_behavior_count = data->persistent_keybind_behavior_count;
+        config->keybind_degree_offset = data->persistent_keybind_degree_offset;
+        config->keybind_tick = data->persistent_keybind_tick;
     }
 
     return 0;
 }
+
+// Helper macro to get behavior device name string from phandle array
+// DEVICE_DT_NAME returns the device name string (e.g., behavior node names)
+// which is used by zmk_behavior_get_binding() to look up the behavior device
+#define KEYBIND_BEHAVIOR_NAME(node, idx)                                                           \
+    DEVICE_DT_NAME(DT_PHANDLE_BY_IDX(node, keybind_behaviors, idx))
+
+// Macro to generate keybind behaviors array based on array length
+#define KEYBIND_BEHAVIORS_0(node)
+#define KEYBIND_BEHAVIORS_1(node) KEYBIND_BEHAVIOR_NAME(node, 0),
+#define KEYBIND_BEHAVIORS_2(node) KEYBIND_BEHAVIORS_1(node) KEYBIND_BEHAVIOR_NAME(node, 1),
+#define KEYBIND_BEHAVIORS_3(node) KEYBIND_BEHAVIORS_2(node) KEYBIND_BEHAVIOR_NAME(node, 2),
+#define KEYBIND_BEHAVIORS_4(node) KEYBIND_BEHAVIORS_3(node) KEYBIND_BEHAVIOR_NAME(node, 3),
+#define KEYBIND_BEHAVIORS_5(node) KEYBIND_BEHAVIORS_4(node) KEYBIND_BEHAVIOR_NAME(node, 4),
+#define KEYBIND_BEHAVIORS_6(node) KEYBIND_BEHAVIORS_5(node) KEYBIND_BEHAVIOR_NAME(node, 5),
+#define KEYBIND_BEHAVIORS_7(node) KEYBIND_BEHAVIORS_6(node) KEYBIND_BEHAVIOR_NAME(node, 6),
+#define KEYBIND_BEHAVIORS_8(node) KEYBIND_BEHAVIORS_7(node) KEYBIND_BEHAVIOR_NAME(node, 7),
+
+#define KEYBIND_BEHAVIORS(node, len) KEYBIND_BEHAVIORS_##len(node)
 
 #define RUNTIME_PROCESSOR_INST(n)                                                                  \
     static const uint16_t runtime_x_codes_##n[] = DT_INST_PROP(n, x_codes);                        \
@@ -886,6 +1130,10 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
     COND_CODE_1(DT_INST_NODE_HAS_PROP(n, temp_layer_keep_keycodes),                                \
                 (static const uint16_t runtime_temp_layer_keep_keycodes_##n[] =                    \
                      DT_INST_PROP(n, temp_layer_keep_keycodes);),                                  \
+                ())                                                                                \
+    COND_CODE_1(DT_INST_NODE_HAS_PROP(n, keybind_behaviors),                                       \
+                (static const char *runtime_keybind_behaviors_##n[] = {KEYBIND_BEHAVIORS(          \
+                     DT_DRV_INST(n), DT_INST_PROP_LEN(n, keybind_behaviors))};),                   \
                 ())                                                                                \
     BUILD_ASSERT(sizeof(DT_INST_PROP(n, processor_label)) <=                                       \
                      CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_NAME_MAX_LEN,                              \
@@ -929,6 +1177,14 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         .initial_xy_swap_enabled = DT_INST_PROP(n, xy_swap_enabled),                               \
         .initial_x_invert = DT_INST_PROP(n, x_invert),                                             \
         .initial_y_invert = DT_INST_PROP(n, y_invert),                                             \
+        .keybind_behaviors = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, keybind_behaviors),              \
+                                         (runtime_keybind_behaviors_##n), (NULL)),                 \
+        .keybind_behaviors_len = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, keybind_behaviors),          \
+                                             (DT_INST_PROP_LEN(n, keybind_behaviors)), (0)),       \
+        .initial_keybind_enabled = DT_INST_PROP(n, keybind_enabled),                               \
+        .initial_keybind_behavior_count = DT_INST_PROP_OR(n, keybind_behavior_count, 4),           \
+        .initial_keybind_degree_offset = DT_INST_PROP_OR(n, keybind_degree_offset, 0),             \
+        .initial_keybind_tick = DT_INST_PROP_OR(n, keybind_tick, 10),                              \
     };                                                                                             \
     static struct runtime_processor_data runtime_data_##n;                                         \
     DEVICE_DT_INST_DEFINE(n, &runtime_processor_init, NULL, &runtime_data_##n,                     \
@@ -1522,6 +1778,127 @@ int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool inve
 
     LOG_INF("Y axis invert: %s%s", invert ? "true" : "false",
             persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_keybind_enabled(const struct device *dev, bool enabled,
+                                                    bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->keybind_enabled = enabled;
+
+    if (persistent) {
+        data->persistent_keybind_enabled = enabled;
+    }
+
+    LOG_INF("Keybind enabled: %s%s", enabled ? "true" : "false",
+            persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_keybind_behavior_count(const struct device *dev, uint8_t count,
+                                                           bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    if (count < 1 || count > MAX_KEYBIND_BEHAVIORS) {
+        LOG_ERR("Invalid keybind behavior count %d (must be 1-%d)", count, MAX_KEYBIND_BEHAVIORS);
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->keybind_behavior_count = count;
+
+    if (persistent) {
+        data->persistent_keybind_behavior_count = count;
+    }
+
+    LOG_INF("Keybind behavior count: %d%s", count, persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_keybind_degree_offset(const struct device *dev,
+                                                          uint16_t degree_offset, bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    if (degree_offset >= 360) {
+        LOG_ERR("Invalid keybind degree offset %d (must be 0-359)", degree_offset);
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->keybind_degree_offset = degree_offset;
+
+    if (persistent) {
+        data->persistent_keybind_degree_offset = degree_offset;
+    }
+
+    LOG_INF("Keybind degree offset: %d%s", degree_offset,
+            persistent ? " (persistent)" : " (temporary)");
+
+    int ret = 0;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    if (persistent) {
+        ret = schedule_save_processor_settings(dev);
+        raise_state_changed_event(dev);
+    }
+#endif
+
+    return ret;
+}
+
+int zmk_input_processor_runtime_set_keybind_tick(const struct device *dev, uint16_t tick,
+                                                 bool persistent) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    if (tick == 0) {
+        LOG_ERR("Invalid keybind tick %d (must be > 0)", tick);
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->keybind_tick = tick;
+
+    if (persistent) {
+        data->persistent_keybind_tick = tick;
+    }
+
+    LOG_INF("Keybind tick: %d%s", tick, persistent ? " (persistent)" : " (temporary)");
 
     int ret = 0;
 #if IS_ENABLED(CONFIG_SETTINGS)
