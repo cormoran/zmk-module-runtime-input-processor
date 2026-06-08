@@ -796,6 +796,12 @@ int zmk_input_processor_runtime_reset(const struct device *dev) {
         data->temp_layer_layer_active = false;
     }
 
+    // Reset code mapping settings to defaults
+    data->xy_to_scroll_enabled = cfg->initial_xy_to_scroll_enabled;
+    data->xy_swap_enabled = cfg->initial_xy_swap_enabled;
+    data->persistent_xy_to_scroll_enabled = cfg->initial_xy_to_scroll_enabled;
+    data->persistent_xy_swap_enabled = cfg->initial_xy_swap_enabled;
+
     // Reset axis invert settings to defaults
     data->x_invert = cfg->initial_x_invert;
     data->y_invert = cfg->initial_y_invert;
@@ -836,6 +842,10 @@ void zmk_input_processor_runtime_restore_persistent(const struct device *dev) {
     // Reset snap state when restoring
     data->axis_snap_cross_axis_accum = 0;
     data->axis_snap_last_decay_timestamp = 0;
+
+    // Restore code mapping settings
+    data->xy_to_scroll_enabled = data->persistent_xy_to_scroll_enabled;
+    data->xy_swap_enabled = data->persistent_xy_swap_enabled;
 
     // Restore axis invert settings
     data->x_invert = data->persistent_x_invert;
