@@ -8,4 +8,21 @@ include:
   - artifact: my_awesome_keyboard_without_custom_rpc_support
     board: xiao_ble//zmk
     shield: my_awesome_keyboard
+
+  # Hardware-free Renode testing (see README.md's "Hardware-free Renode
+  # testing" section). Uses the renode-studio-uart snippet from
+  # cormoran/zmk-workspace (a test-only west dependency, see
+  # west/west-dependency/west-test-dependency.yml) in place of the real
+  # USB-carried studio-rpc-usb-uart snippet -- Renode's nRF52840 USBD model
+  # can't present a host-openable CDC port, so this binds Studio RPC (and
+  # the console) to real UART peripherals instead; see that snippet's own
+  # overlay for the full story. Produces zephyr/zmk.elf (not a meaningfully
+  # flashable target on real hardware -- the pinctrl/overlay it uses is
+  # emulation-only).
+  - artifact: renode_smoke_test
+    board: xiao_ble//zmk
+    shield: my_awesome_keyboard
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
+    snippets:
+      - renode-studio-uart
 ---

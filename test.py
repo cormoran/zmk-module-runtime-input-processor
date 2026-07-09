@@ -55,7 +55,22 @@ class WestCommandsTests(unittest.TestCase):
                 "# CONFIG_ZMK_STUDIO is not set",
                 "CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR=y",
                 NotFound("CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC"),
-            ]
+            ],
+            # Hardware-free Renode testing artifact (see README.md's
+            # "Hardware-free Renode testing" section): built with the
+            # renode-studio-uart snippet from cormoran/zmk-workspace (a
+            # test-only west dependency) instead of the real USB-carried
+            # studio-rpc-usb-uart snippet. Verify the snippet's Kconfig
+            # actually took effect -- the Renode-only transport enabled, the
+            # real USB-gated one and USB itself disabled.
+            "renode_smoke_test": [
+                "CONFIG_ZMK_STUDIO=y",
+                "CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR=y",
+                "CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y",
+                "CONFIG_ZMK_RENODE_STUDIO_UART_TRANSPORT=y",
+                "# CONFIG_ZMK_STUDIO_TRANSPORT_UART is not set",
+                "# CONFIG_ZMK_USB is not set",
+            ],
         }
 
         for artifact in artifacts_and_expected_config.keys():
