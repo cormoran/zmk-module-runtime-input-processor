@@ -126,7 +126,9 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
 ### Web Interface
 
 1. Build and flash your firmware with the runtime input processor enabled
-2. Connect to your keyboard via Web Serial (Chrome/Edge)
+2. Connect to your keyboard via USB (Web Serial) or Bluetooth (Web
+   Bluetooth) using a Chromium-based browser (Chrome, Edge, ...) over HTTPS
+   or localhost
 3. The web interface will automatically detect available input processors
 4. Adjust scaling and rotation parameters
 5. Changes are applied immediately without restarting
