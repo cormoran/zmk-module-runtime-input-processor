@@ -300,3 +300,24 @@ int zmk_input_processor_runtime_set_x_invert(const struct device *dev, bool inve
  */
 int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool invert,
                                              bool persistent);
+
+#if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_TEST)
+/**
+ * @brief Test-only: force a processor's pending debounced settings save to
+ * run now, instead of waiting out CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE.
+ *
+ * @param dev Pointer to the device structure
+ */
+void zmk_input_processor_runtime_test_flush_save(const struct device *dev);
+
+/**
+ * @brief Test-only: synchronously re-run the persisted-settings boot-apply
+ * logic for every processor, bypassing the normal SYS_INIT delay.
+ *
+ * Lets a test simulate "reload after reboot" without waiting on real time:
+ * write a persistent value, force zmk-feature-custom-settings to reload it
+ * from its (fake, in test) settings backend via settings_load_subtree(), then
+ * call this to verify the exact apply path the real boot work handler uses.
+ */
+void zmk_input_processor_runtime_test_apply_persisted_settings(void);
+#endif

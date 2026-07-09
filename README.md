@@ -35,6 +35,10 @@ manifest:
       revision: v0.3+custom-studio-protocol
       import:
         file: app/west.yml
+    # Persistent settings storage backend used by this module
+    - name: zmk-feature-custom-settings
+      remote: cormoran
+      revision: main
 ```
 
 ### 2. Enable the feature in your `config/<shield>.conf`
@@ -49,6 +53,13 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR=y
 CONFIG_ZMK_STUDIO=y
 CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
 ```
+
+`CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR` automatically selects `CONFIG_ZMK_CUSTOM_SETTINGS`
+(from [zmk-feature-custom-settings](https://github.com/cormoran/zmk-feature-custom-settings)),
+which this module uses purely as a typed persistence backend for the settings described
+below - `zmk-feature-custom-settings`'s own Studio RPC surface is not required and is not
+enabled by this module (the RPC/web UI in this repo is unaffected and unofficial-Studio-RPC
+compatible as before).
 
 ### 3. Add runtime input processor to your keymap
 

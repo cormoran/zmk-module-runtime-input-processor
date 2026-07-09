@@ -1,9 +1,9 @@
 # List of this module's dependencies
 manifest:
-  # remotes:
-  #   - name: remote-name
-  #     url-base: https://github.com/remote-name
-  # projects:
-  #   - name: repository-name
-  #     remote: remote-name
-  #     revision: branch-or-tag-name
+  remotes:
+    - name: cormoran
+      url-base: https://github.com/cormoran
+  projects:
+    - name: zmk-feature-custom-settings
+      remote: cormoran
+      revision: main
