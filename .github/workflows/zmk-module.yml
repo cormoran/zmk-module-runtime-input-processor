@@ -10,7 +10,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Building the extra renode_smoke_test artifact (tests/zmk-config/build.yaml)
+    # plus installing Renode and running the Renode test suite takes longer
+    # than a plain build; 10 minutes was fine before those existed.
+    timeout-minutes: 30
     container:
       image: zmkfirmware/zmk-build-arm:stable
     name: Build
@@ -34,6 +37,9 @@ jobs:
           west update --narrow
           west zephyr-export
       - name: Test
+        # Builds every tests/zmk-config/build.yaml artifact, including
+        # renode_smoke_test (the Renode-testable ELF the next step tests) --
+        # "build done in a previous step" for the Renode CI action below.
         run: python3 -m unittest -v
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -41,3 +47,15 @@ jobs:
           name: zmk-firmware
           path: |
             build/*/zephyr/zmk.uf2
+      # Hardware-free Renode test (see README.md's "Hardware-free Renode
+      # testing" section): boots the renode_smoke_test artifact built above
+      # and runs tests/renode/. This action does NOT build firmware itself
+      # -- it only tests the ELF path given below. Pinned by commit SHA
+      # (immutable). Paths are relative to the checkout root -- do NOT use
+      # ${{ github.workspace }} here: in a container job that expression is
+      # the runner-host path, not the container's mount path.
+      - uses: cormoran/zmk-workspace/.github/actions/zmk-renode-test@5a21480a03eedaf664745e450c9c90e77aaef292
+        with:
+          elf-path: build/renode_smoke_test/zephyr/zmk.elf
+          tests: tests/renode
+          west-topdir: .
