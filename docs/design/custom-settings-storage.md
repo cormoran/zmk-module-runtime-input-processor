@@ -62,38 +62,46 @@ storage and avoids 15×N registration boilerplate.
   never listed/edited/exported there. This module's own RPC stays the sole editor.
 - Default value: an empty (zero-length) `ZMK_CUSTOM_SETTING_VALUE_BYTES()`, meaning
   "nothing persisted → keep DT defaults".
-- Size: the packed blob is ~34–37 bytes (15 fields, see below) — comfortably under
-  the fixed `CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE`=64 carrier. **No
-  `LARGE_VALUES` / `DEFINE_SIZED` needed.** (Confirm actual `sizeof` at build; if
-  it ever exceeds 64, switch to `ZMK_CUSTOM_SETTING_DEFINE_SIZED`.)
+- Size: the blob is `1 + sizeof(struct rip_persist_v1)` (~40 bytes for the 15
+  fields, see below) — comfortably under the fixed
+  `CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE`=64 carrier. **No `LARGE_VALUES` /
+  `DEFINE_SIZED` needed.** A `BUILD_ASSERT` enforces this at build time; if the
+  struct ever exceeds the carrier, switch to `ZMK_CUSTOM_SETTING_DEFINE_SIZED`.
 
-### Packed blob format (explicit, not raw struct)
+### Blob format: `[version][raw struct]`
 
-Serialize/deserialize explicitly (do NOT `memcpy` a `struct` — avoids padding/ABI
-surprises and gives a version byte). Layout:
+Store a version byte followed by a raw `memcpy` of the on-flash struct
+(`struct rip_persist_v1`, the same 15 fields sourced from `data->persistent_*`):
 
 ```
 byte 0:      version  (start at 1)
-then, little-endian, the 15 persisted fields in this fixed order:
-  u32 scale_multiplier
-  u32 scale_divisor
-  i32 rotation_degrees
-  u8  temp_layer_enabled (bool)
-  u8  temp_layer_layer
-  u16 temp_layer_activation_delay_ms
-  u16 temp_layer_deactivation_delay_ms
-  u32 active_layers
-  u8  axis_snap_mode
-  u16 axis_snap_threshold
-  u16 axis_snap_timeout_ms
-  u8  xy_to_scroll_enabled (bool)
-  u8  xy_swap_enabled (bool)
-  u8  x_invert (bool)
-  u8  y_invert (bool)
+bytes 1..:   raw memcpy of struct rip_persist_v1 (sizeof(struct) bytes)
+
+total size = 1 + sizeof(struct rip_persist_v1)
 ```
 
-On load: if read size == 0 → no persisted value, keep DT defaults. If version
-mismatches or size is wrong → `LOG_WRN` and keep DT defaults (do not fail boot).
+The version byte is written *separately* from the struct `memcpy`
+(`buf[0] = version; memcpy(&buf[1], &settings, sizeof(settings))`, total size
+`1 + sizeof`), rather than memcpy'ing a `{uint8_t version; struct ...;}` wrapper
+whole, so no wrapper-struct padding enters the layout.
+
+This is safe because the blob is only ever written and read back by this same
+firmware image — the in-memory struct layout is a valid wire format for our own
+use. A `BUILD_ASSERT(1 + sizeof(struct rip_persist_v1) <=
+CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE)` fails the build (not silently) if the
+struct ever outgrows the 64-byte carrier.
+
+On load:
+- read size == 0 → no persisted value, keep DT defaults;
+- otherwise require BOTH `buf[0] == RIP_SETTINGS_BLOB_VERSION` AND total
+  `size == 1 + sizeof(struct rip_persist_v1)`; on any mismatch (e.g. a future
+  firmware changed the struct and bumped the version, or a truncated record) →
+  `LOG_WRN` and keep DT defaults (never fail boot).
+
+A firmware that changes `struct rip_persist_v1` must bump
+`RIP_SETTINGS_BLOB_VERSION`; the old blob is then rejected by the version/size
+check and DT defaults are used. There is no on-flash backward-compat requirement
+with the old `settings_save_one` blob.
 
 ## Save path
 

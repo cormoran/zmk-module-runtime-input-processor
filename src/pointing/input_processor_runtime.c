@@ -13,7 +13,6 @@
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/dlist.h>
 
 #if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
@@ -483,8 +482,8 @@ static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
 /*
  * Persistence backend: one zmk-feature-custom-settings entry per processor
  * (subsystem "cormoran__rip", key = the processor's compile-time
- * processor-label), storing an explicitly packed (not memcpy'd struct) blob
- * of the 15 persisted fields. See docs/design/custom-settings-storage.md.
+ * processor-label), storing a version-byte-prefixed raw memcpy of the 15
+ * persisted fields. See docs/design/custom-settings-storage.md.
  * Using a double-underscore subsystem id keeps this separate from the
  * module's own Studio RPC custom subsystem ("cormoran_rip", single
  * underscore, see src/studio/custom_handler.c) - this storage subsystem is
@@ -493,14 +492,38 @@ static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
  */
 #define RIP_SETTINGS_SUBSYSTEM_ID "cormoran__rip"
 #define RIP_SETTINGS_BLOB_VERSION 1
-/* version(1) + scale_multiplier(4) + scale_divisor(4) + rotation_degrees(4)
- * + temp_layer_enabled(1) + temp_layer_layer(1) +
- * temp_layer_activation_delay_ms(2) + temp_layer_deactivation_delay_ms(2) +
- * active_layers(4) + axis_snap_mode(1) + axis_snap_threshold(2) +
- * axis_snap_timeout_ms(2) + xy_to_scroll_enabled(1) + xy_swap_enabled(1) +
- * x_invert(1) + y_invert(1) = 32 bytes, comfortably under the fixed
- * CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE=64 carrier. */
-#define RIP_SETTINGS_BLOB_SIZE 32
+
+/*
+ * The persisted-on-flash struct for one processor's 15 settings fields.
+ * Stored as a raw memcpy (see pack/unpack below) rather than a hand-serialized
+ * byte stream: it is only ever written and read back by this same firmware
+ * image, so the in-memory layout is a valid wire format, and the leading
+ * version byte + exact-size check guard against a struct-layout change (a
+ * future firmware that alters this struct must bump RIP_SETTINGS_BLOB_VERSION,
+ * after which an old blob is rejected by size/version and DT defaults are
+ * kept). This is the same field set the module previously persisted; there is
+ * no on-flash backward-compat requirement with the old settings_save_one blob.
+ */
+struct rip_persist_v1 {
+    uint32_t scale_multiplier;
+    uint32_t scale_divisor;
+    int32_t rotation_degrees;
+    bool temp_layer_enabled;
+    uint8_t temp_layer_layer;
+    uint16_t temp_layer_activation_delay_ms;
+    uint16_t temp_layer_deactivation_delay_ms;
+    uint32_t active_layers;
+    uint8_t axis_snap_mode;
+    uint16_t axis_snap_threshold;
+    uint16_t axis_snap_timeout_ms;
+    bool xy_to_scroll_enabled;
+    bool xy_swap_enabled;
+    bool x_invert;
+    bool y_invert;
+};
+
+/* On-disk BYTES layout: [uint8_t version][raw struct rip_persist_v1 bytes]. */
+#define RIP_SETTINGS_BLOB_SIZE (1 + sizeof(struct rip_persist_v1))
 
 BUILD_ASSERT(RIP_SETTINGS_BLOB_SIZE <= CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE,
              "runtime input processor settings blob exceeds "
@@ -514,35 +537,31 @@ BUILD_ASSERT(RIP_SETTINGS_BLOB_SIZE <= CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE
 #define RIP_SETTINGS_EMPTY_BYTES_DEFAULT                                                           \
     ((struct zmk_custom_setting_value){.type = ZMK_CUSTOM_SETTING_VALUE_TYPE_BYTES, .size = 0})
 
+/* Writes [version][raw struct] into buf (must be >= RIP_SETTINGS_BLOB_SIZE)
+ * and returns the number of bytes written. Version byte is written separately
+ * from the struct memcpy so no wrapper-struct padding enters the layout. */
 static size_t pack_processor_settings(const struct runtime_processor_data *data, uint8_t *buf) {
-    size_t i = 0;
-    buf[i++] = RIP_SETTINGS_BLOB_VERSION;
-    sys_put_le32(data->persistent_scale_multiplier, &buf[i]);
-    i += 4;
-    sys_put_le32(data->persistent_scale_divisor, &buf[i]);
-    i += 4;
-    sys_put_le32((uint32_t)data->persistent_rotation_degrees, &buf[i]);
-    i += 4;
-    buf[i++] = data->persistent_temp_layer_enabled ? 1 : 0;
-    buf[i++] = data->persistent_temp_layer_layer;
-    sys_put_le16(data->persistent_temp_layer_activation_delay_ms, &buf[i]);
-    i += 2;
-    sys_put_le16(data->persistent_temp_layer_deactivation_delay_ms, &buf[i]);
-    i += 2;
-    sys_put_le32(data->persistent_active_layers, &buf[i]);
-    i += 4;
-    buf[i++] = data->persistent_axis_snap_mode;
-    sys_put_le16(data->persistent_axis_snap_threshold, &buf[i]);
-    i += 2;
-    sys_put_le16(data->persistent_axis_snap_timeout_ms, &buf[i]);
-    i += 2;
-    buf[i++] = data->persistent_xy_to_scroll_enabled ? 1 : 0;
-    buf[i++] = data->persistent_xy_swap_enabled ? 1 : 0;
-    buf[i++] = data->persistent_x_invert ? 1 : 0;
-    buf[i++] = data->persistent_y_invert ? 1 : 0;
+    struct rip_persist_v1 settings = {
+        .scale_multiplier = data->persistent_scale_multiplier,
+        .scale_divisor = data->persistent_scale_divisor,
+        .rotation_degrees = data->persistent_rotation_degrees,
+        .temp_layer_enabled = data->persistent_temp_layer_enabled,
+        .temp_layer_layer = data->persistent_temp_layer_layer,
+        .temp_layer_activation_delay_ms = data->persistent_temp_layer_activation_delay_ms,
+        .temp_layer_deactivation_delay_ms = data->persistent_temp_layer_deactivation_delay_ms,
+        .active_layers = data->persistent_active_layers,
+        .axis_snap_mode = data->persistent_axis_snap_mode,
+        .axis_snap_threshold = data->persistent_axis_snap_threshold,
+        .axis_snap_timeout_ms = data->persistent_axis_snap_timeout_ms,
+        .xy_to_scroll_enabled = data->persistent_xy_to_scroll_enabled,
+        .xy_swap_enabled = data->persistent_xy_swap_enabled,
+        .x_invert = data->persistent_x_invert,
+        .y_invert = data->persistent_y_invert,
+    };
 
-    __ASSERT_NO_MSG(i == RIP_SETTINGS_BLOB_SIZE);
-    return i;
+    buf[0] = RIP_SETTINGS_BLOB_VERSION;
+    memcpy(&buf[1], &settings, sizeof(settings));
+    return RIP_SETTINGS_BLOB_SIZE;
 }
 
 /* Unpacks a persisted blob and applies it to both the persistent_* baseline
@@ -551,72 +570,48 @@ static size_t pack_processor_settings(const struct runtime_processor_data *data,
  * blob size or version does not match (caller should keep DT defaults). */
 static int unpack_and_apply_processor_settings(struct runtime_processor_data *data,
                                                const uint8_t *buf, size_t len) {
-    if (len != RIP_SETTINGS_BLOB_SIZE) {
+    /* Require both the exact expected total size and the matching version.
+     * A size mismatch alone (e.g. after a struct-layout change without a
+     * version bump) already implies the bytes are not interpretable. */
+    if (len != RIP_SETTINGS_BLOB_SIZE || buf[0] != RIP_SETTINGS_BLOB_VERSION) {
         return -EINVAL;
     }
 
-    size_t i = 0;
-    uint8_t version = buf[i++];
-    if (version != RIP_SETTINGS_BLOB_VERSION) {
-        return -EINVAL;
-    }
+    struct rip_persist_v1 settings;
+    memcpy(&settings, &buf[1], sizeof(settings));
 
-    uint32_t scale_multiplier = sys_get_le32(&buf[i]);
-    i += 4;
-    uint32_t scale_divisor = sys_get_le32(&buf[i]);
-    i += 4;
-    int32_t rotation_degrees = (int32_t)sys_get_le32(&buf[i]);
-    i += 4;
-    bool temp_layer_enabled = buf[i++] != 0;
-    uint8_t temp_layer_layer = buf[i++];
-    uint16_t temp_layer_activation_delay_ms = sys_get_le16(&buf[i]);
-    i += 2;
-    uint16_t temp_layer_deactivation_delay_ms = sys_get_le16(&buf[i]);
-    i += 2;
-    uint32_t active_layers = sys_get_le32(&buf[i]);
-    i += 4;
-    uint8_t axis_snap_mode = buf[i++];
-    uint16_t axis_snap_threshold = sys_get_le16(&buf[i]);
-    i += 2;
-    uint16_t axis_snap_timeout_ms = sys_get_le16(&buf[i]);
-    i += 2;
-    bool xy_to_scroll_enabled = buf[i++] != 0;
-    bool xy_swap_enabled = buf[i++] != 0;
-    bool x_invert = buf[i++] != 0;
-    bool y_invert = buf[i++] != 0;
-
-    data->persistent_scale_multiplier = scale_multiplier;
-    data->persistent_scale_divisor = scale_divisor;
-    data->persistent_rotation_degrees = rotation_degrees;
-    data->persistent_temp_layer_enabled = temp_layer_enabled;
-    data->persistent_temp_layer_layer = temp_layer_layer;
-    data->persistent_temp_layer_activation_delay_ms = temp_layer_activation_delay_ms;
-    data->persistent_temp_layer_deactivation_delay_ms = temp_layer_deactivation_delay_ms;
-    data->persistent_active_layers = active_layers;
-    data->persistent_axis_snap_mode = axis_snap_mode;
-    data->persistent_axis_snap_threshold = axis_snap_threshold;
-    data->persistent_axis_snap_timeout_ms = axis_snap_timeout_ms;
-    data->persistent_xy_to_scroll_enabled = xy_to_scroll_enabled;
-    data->persistent_xy_swap_enabled = xy_swap_enabled;
-    data->persistent_x_invert = x_invert;
-    data->persistent_y_invert = y_invert;
+    data->persistent_scale_multiplier = settings.scale_multiplier;
+    data->persistent_scale_divisor = settings.scale_divisor;
+    data->persistent_rotation_degrees = settings.rotation_degrees;
+    data->persistent_temp_layer_enabled = settings.temp_layer_enabled;
+    data->persistent_temp_layer_layer = settings.temp_layer_layer;
+    data->persistent_temp_layer_activation_delay_ms = settings.temp_layer_activation_delay_ms;
+    data->persistent_temp_layer_deactivation_delay_ms = settings.temp_layer_deactivation_delay_ms;
+    data->persistent_active_layers = settings.active_layers;
+    data->persistent_axis_snap_mode = settings.axis_snap_mode;
+    data->persistent_axis_snap_threshold = settings.axis_snap_threshold;
+    data->persistent_axis_snap_timeout_ms = settings.axis_snap_timeout_ms;
+    data->persistent_xy_to_scroll_enabled = settings.xy_to_scroll_enabled;
+    data->persistent_xy_swap_enabled = settings.xy_swap_enabled;
+    data->persistent_x_invert = settings.x_invert;
+    data->persistent_y_invert = settings.y_invert;
 
     // Apply to current values
-    data->scale_multiplier = scale_multiplier;
-    data->scale_divisor = scale_divisor;
-    data->rotation_degrees = rotation_degrees;
-    data->temp_layer_enabled = temp_layer_enabled;
-    data->temp_layer_layer = temp_layer_layer;
-    data->temp_layer_activation_delay_ms = temp_layer_activation_delay_ms;
-    data->temp_layer_deactivation_delay_ms = temp_layer_deactivation_delay_ms;
-    data->active_layers = active_layers;
-    data->axis_snap_mode = axis_snap_mode;
-    data->axis_snap_threshold = axis_snap_threshold;
-    data->axis_snap_timeout_ms = axis_snap_timeout_ms;
-    data->xy_to_scroll_enabled = xy_to_scroll_enabled;
-    data->xy_swap_enabled = xy_swap_enabled;
-    data->x_invert = x_invert;
-    data->y_invert = y_invert;
+    data->scale_multiplier = settings.scale_multiplier;
+    data->scale_divisor = settings.scale_divisor;
+    data->rotation_degrees = settings.rotation_degrees;
+    data->temp_layer_enabled = settings.temp_layer_enabled;
+    data->temp_layer_layer = settings.temp_layer_layer;
+    data->temp_layer_activation_delay_ms = settings.temp_layer_activation_delay_ms;
+    data->temp_layer_deactivation_delay_ms = settings.temp_layer_deactivation_delay_ms;
+    data->active_layers = settings.active_layers;
+    data->axis_snap_mode = settings.axis_snap_mode;
+    data->axis_snap_threshold = settings.axis_snap_threshold;
+    data->axis_snap_timeout_ms = settings.axis_snap_timeout_ms;
+    data->xy_to_scroll_enabled = settings.xy_to_scroll_enabled;
+    data->xy_swap_enabled = settings.xy_swap_enabled;
+    data->x_invert = settings.x_invert;
+    data->y_invert = settings.y_invert;
     update_rotation_values(data);
 
     return 0;
