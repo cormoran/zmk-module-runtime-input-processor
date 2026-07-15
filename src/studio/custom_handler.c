@@ -319,7 +319,7 @@ static int handle_set_scale_multiplier(const cormoran_rip_SetScaleMultiplierRequ
         return ret;
     }
 
-    // Set new multiplier (persistent)
+    // Set new multiplier (write mode per request)
     ret = zmk_input_processor_runtime_set_scaling(dev, req->value, config.scale_divisor,
                                                   rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -355,7 +355,7 @@ static int handle_set_scale_divisor(const cormoran_rip_SetScaleDivisorRequest *r
         return ret;
     }
 
-    // Set new divisor (persistent)
+    // Set new divisor (write mode per request)
     ret = zmk_input_processor_runtime_set_scaling(dev, config.scale_multiplier, req->value,
                                                   rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -384,7 +384,7 @@ static int handle_set_rotation(const cormoran_rip_SetRotationRequest *req,
         return -ENODEV;
     }
 
-    // Set rotation (persistent)
+    // Set rotation (write mode per request)
     int ret =
         zmk_input_processor_runtime_set_rotation(dev, req->value, rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -441,7 +441,7 @@ static int handle_set_temp_layer_enabled(const cormoran_rip_SetTempLayerEnabledR
         return -ENODEV;
     }
 
-    // Set temp-layer enabled (persistent)
+    // Set temp-layer enabled (write mode per request)
     int ret = zmk_input_processor_runtime_set_temp_layer_enabled(dev, req->enabled,
                                                                  rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -470,7 +470,7 @@ static int handle_set_temp_layer_layer(const cormoran_rip_SetTempLayerLayerReque
         return -ENODEV;
     }
 
-    // Set temp-layer layer (persistent)
+    // Set temp-layer layer (write mode per request)
     int ret = zmk_input_processor_runtime_set_temp_layer_layer(dev, req->layer,
                                                                rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -501,7 +501,7 @@ handle_set_temp_layer_activation_delay(const cormoran_rip_SetTempLayerActivation
         return -ENODEV;
     }
 
-    // Set temp-layer activation delay (persistent)
+    // Set temp-layer activation delay (write mode per request)
     int ret = zmk_input_processor_runtime_set_temp_layer_activation_delay(
         dev, req->activation_delay_ms, rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -532,7 +532,7 @@ static int handle_set_temp_layer_deactivation_delay(
         return -ENODEV;
     }
 
-    // Set temp-layer deactivation delay (persistent)
+    // Set temp-layer deactivation delay (write mode per request)
     int ret = zmk_input_processor_runtime_set_temp_layer_deactivation_delay(
         dev, req->deactivation_delay_ms, rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -562,7 +562,7 @@ static int handle_set_active_layers(const cormoran_rip_SetActiveLayersRequest *r
         return -ENODEV;
     }
 
-    // Set active layers (persistent)
+    // Set active layers (write mode per request)
     int ret = zmk_input_processor_runtime_set_active_layers(dev, req->layers,
                                                             rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -591,7 +591,7 @@ static int handle_set_axis_snap_mode(const cormoran_rip_SetAxisSnapModeRequest *
         return -ENODEV;
     }
 
-    // Set axis snap mode (persistent)
+    // Set axis snap mode (write mode per request)
     int ret = zmk_input_processor_runtime_set_axis_snap_mode(dev, req->mode,
                                                              rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -620,7 +620,7 @@ static int handle_set_axis_snap_threshold(const cormoran_rip_SetAxisSnapThreshol
         return -ENODEV;
     }
 
-    // Set axis snap threshold (persistent)
+    // Set axis snap threshold (write mode per request)
     int ret = zmk_input_processor_runtime_set_axis_snap_threshold(dev, req->threshold,
                                                                   rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -649,7 +649,7 @@ static int handle_set_axis_snap_timeout(const cormoran_rip_SetAxisSnapTimeoutReq
         return -ENODEV;
     }
 
-    // Set axis snap timeout (persistent)
+    // Set axis snap timeout (write mode per request)
     int ret = zmk_input_processor_runtime_set_axis_snap_timeout(dev, req->timeout_ms,
                                                                 rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -678,7 +678,7 @@ static int handle_set_x_invert(const cormoran_rip_SetXInvertRequest *req,
         return -ENODEV;
     }
 
-    // Set X invert (persistent)
+    // Set X invert (write mode per request)
     int ret =
         zmk_input_processor_runtime_set_x_invert(dev, req->invert, rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -707,7 +707,7 @@ static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
         return -ENODEV;
     }
 
-    // Set Y invert (persistent)
+    // Set Y invert (write mode per request)
     int ret =
         zmk_input_processor_runtime_set_y_invert(dev, req->invert, rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -792,7 +792,7 @@ static int handle_set_xy_to_scroll_enabled(const cormoran_rip_SetXyToScrollEnabl
         return -ENODEV;
     }
 
-    // Set XY-to-scroll enabled (persistent)
+    // Set XY-to-scroll enabled (write mode per request)
     int ret = zmk_input_processor_runtime_set_xy_to_scroll_enabled(dev, req->enabled,
                                                                    rip_write_mode(req->write_mode));
     if (ret < 0) {
@@ -821,7 +821,7 @@ static int handle_set_xy_swap_enabled(const cormoran_rip_SetXySwapEnabledRequest
         return -ENODEV;
     }
 
-    // Set XY-swap enabled (persistent)
+    // Set XY-swap enabled (write mode per request)
     int ret = zmk_input_processor_runtime_set_xy_swap_enabled(dev, req->enabled,
                                                               rip_write_mode(req->write_mode));
     if (ret < 0) {

@@ -142,6 +142,33 @@ compatible as before).
 4. Adjust scaling and rotation parameters
 5. Changes are applied immediately without restarting
 
+### Storage modes (memory vs. persistent)
+
+Each setting write chooses where the value is stored, mirroring
+`zmk-feature-custom-settings`:
+
+- **Persist to flash** (default): the value is applied and saved to
+  non-volatile storage, so it survives a reboot. This is the historical
+  behavior — clients that do not select a mode always persist.
+- **Memory only**: the value is applied and kept as the current baseline in
+  RAM, but is _not_ written to flash. It is lost on reboot unless you save it.
+
+The web UI exposes this as the **Storage** selector next to "Apply Settings".
+Three whole-keyboard operations sit next to "Refresh List":
+
+- **Save All** — flush every processor's current settings to flash (persist any
+  "memory only" changes).
+- **Discard All** — drop unsaved (memory-only) changes and reload the last saved
+  values from flash; processors with nothing saved return to their devicetree
+  defaults.
+- **Reset All** — reset every processor to its devicetree defaults and persist
+  them.
+
+The equivalent firmware API is
+`zmk_input_processor_runtime_save_all()` / `_discard_all()` / `_reset_all()`,
+and the setters take a `zmk_input_processor_runtime_write_mode`
+(`PERSIST` / `MEMORY` / `TEMPORARY`).
+
 ### Configuration Parameters
 
 - **Scaling Multiplier/Divisor**: Controls pointer speed
