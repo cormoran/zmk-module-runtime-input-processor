@@ -616,11 +616,9 @@ static int unpack_and_apply_processor_settings(struct runtime_processor_data *da
     return 0;
 }
 
-static void save_processor_settings_work_handler(struct k_work *work) {
-    struct k_work_delayable *dwork = k_work_delayable_from_work(work);
-    struct runtime_processor_data *data =
-        CONTAINER_OF(dwork, struct runtime_processor_data, save_work);
-    const struct device *dev = data->dev;
+/* Pack the processor's current baseline and flush it to flash immediately. */
+static int save_processor_settings_now(const struct device *dev) {
+    struct runtime_processor_data *data = dev->data;
     const struct runtime_processor_config *cfg = dev->config;
 
     struct zmk_custom_setting_value value = {.type = ZMK_CUSTOM_SETTING_VALUE_TYPE_BYTES};
@@ -633,6 +631,14 @@ static void save_processor_settings_work_handler(struct k_work *work) {
     } else {
         LOG_INF("Saved settings for %s", cfg->name);
     }
+    return ret;
+}
+
+static void save_processor_settings_work_handler(struct k_work *work) {
+    struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+    struct runtime_processor_data *data =
+        CONTAINER_OF(dwork, struct runtime_processor_data, save_work);
+    save_processor_settings_now(data->dev);
 }
 
 static int schedule_save_processor_settings(const struct device *dev) {
@@ -746,88 +752,60 @@ static void raise_state_changed_event(const struct device *dev) {
         (struct zmk_input_processor_state_changed){.name = name, .config = config});
 }
 
-// Public API for runtime configuration
-int zmk_input_processor_runtime_set_scaling(const struct device *dev, uint32_t multiplier,
-                                            uint32_t divisor, bool persistent) {
-    if (!dev) {
-        return -EINVAL;
+// Human-readable suffix for the setter LOG lines (leading space + parens so the
+// format strings stay unchanged).
+static const char *write_mode_label(enum zmk_input_processor_runtime_write_mode mode) {
+    switch (mode) {
+    case ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_PERSIST:
+        return " (persistent)";
+    case ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_MEMORY:
+        return " (memory)";
+    default:
+        return " (temporary)";
     }
-
-    struct runtime_processor_data *data = dev->data;
-
-    if (multiplier > 0) {
-        data->scale_multiplier = multiplier;
-        if (persistent) {
-            data->persistent_scale_multiplier = multiplier;
-        }
-    }
-    if (divisor > 0) {
-        data->scale_divisor = divisor;
-        if (persistent) {
-            data->persistent_scale_divisor = divisor;
-        }
-    }
-
-    LOG_INF("Set scaling to %d/%d%s", data->scale_multiplier, data->scale_divisor,
-            persistent ? " (persistent)" : " (temporary)");
-
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        // Raise event for persistent changes
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
 }
 
-int zmk_input_processor_runtime_set_rotation(const struct device *dev, int32_t degrees,
-                                             bool persistent) {
-    if (!dev) {
-        return -EINVAL;
-    }
-
-    struct runtime_processor_data *data = dev->data;
-    data->rotation_degrees = degrees;
-    if (persistent) {
-        data->persistent_rotation_degrees = degrees;
-    }
-    update_rotation_values(data);
-
-    LOG_INF("Set rotation to %d degrees%s", degrees, persistent ? " (persistent)" : " (temporary)");
-
-    int ret = 0;
+/*
+ * Common tail for every setter. The caller has already updated data->X (the
+ * live value) and, for non-temporary modes, data->persistent_X (the baseline).
+ * Propagate that write per its mode - mirroring zmk-feature-custom-settings:
+ *   TEMPORARY: live value only; no notification, no save.
+ *   MEMORY:    baseline staged in RAM; notify, but do not touch flash.
+ *   PERSIST:   baseline staged in RAM; notify and flush to flash.
+ * Without CONFIG_ZMK_CUSTOM_SETTINGS there is no persistence and the module
+ * raised no state-changed notification before, so this is a no-op.
+ */
+static int commit_write(const struct device *dev,
+                        enum zmk_input_processor_runtime_write_mode mode) {
 #if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        // Raise event for persistent changes
-        raise_state_changed_event(dev);
+    if (mode == ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
+        return 0;
     }
+    raise_state_changed_event(dev);
+    if (mode == ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_PERSIST) {
+        return schedule_save_processor_settings(dev);
+    }
+    return 0;
+#else
+    ARG_UNUSED(dev);
+    ARG_UNUSED(mode);
+    return 0;
 #endif
-
-    return ret;
 }
 
-int zmk_input_processor_runtime_reset(const struct device *dev) {
-    if (!dev) {
-        return -EINVAL;
-    }
-
+// Restore every setting (live value + baseline) to its devicetree default. Used
+// by reset (which then persists) and by discard when nothing is saved on flash.
+static void load_processor_defaults(const struct device *dev) {
     const struct runtime_processor_config *cfg = dev->config;
     struct runtime_processor_data *data = dev->data;
 
-    // Reset to initial values
     data->scale_multiplier = cfg->initial_scale_multiplier;
     data->scale_divisor = cfg->initial_scale_divisor;
     data->rotation_degrees = cfg->initial_rotation_degrees;
-
     data->persistent_scale_multiplier = cfg->initial_scale_multiplier;
     data->persistent_scale_divisor = cfg->initial_scale_divisor;
     data->persistent_rotation_degrees = cfg->initial_rotation_degrees;
 
-    // Reset temp-layer settings to defaults
     data->temp_layer_enabled = cfg->initial_temp_layer_enabled;
     data->temp_layer_layer = cfg->initial_temp_layer_layer;
     data->temp_layer_activation_delay_ms = cfg->initial_temp_layer_activation_delay_ms;
@@ -838,7 +816,6 @@ int zmk_input_processor_runtime_reset(const struct device *dev) {
     data->persistent_temp_layer_deactivation_delay_ms =
         cfg->initial_temp_layer_deactivation_delay_ms;
 
-    // Reset active layers to defaults
     data->active_layers = cfg->initial_active_layers;
     data->persistent_active_layers = cfg->initial_active_layers;
 
@@ -848,24 +825,86 @@ int zmk_input_processor_runtime_reset(const struct device *dev) {
         data->temp_layer_layer_active = false;
     }
 
-    // Reset axis invert settings to defaults
+    data->axis_snap_mode = cfg->initial_axis_snap_mode;
+    data->axis_snap_threshold = cfg->initial_axis_snap_threshold;
+    data->axis_snap_timeout_ms = cfg->initial_axis_snap_timeout_ms;
+    data->persistent_axis_snap_mode = cfg->initial_axis_snap_mode;
+    data->persistent_axis_snap_threshold = cfg->initial_axis_snap_threshold;
+    data->persistent_axis_snap_timeout_ms = cfg->initial_axis_snap_timeout_ms;
+    data->axis_snap_cross_axis_accum = 0;
+
+    data->xy_to_scroll_enabled = cfg->initial_xy_to_scroll_enabled;
+    data->xy_swap_enabled = cfg->initial_xy_swap_enabled;
+    data->persistent_xy_to_scroll_enabled = cfg->initial_xy_to_scroll_enabled;
+    data->persistent_xy_swap_enabled = cfg->initial_xy_swap_enabled;
+
     data->x_invert = cfg->initial_x_invert;
     data->y_invert = cfg->initial_y_invert;
     data->persistent_x_invert = cfg->initial_x_invert;
     data->persistent_y_invert = cfg->initial_y_invert;
 
     update_rotation_values(data);
+}
+
+// Public API for runtime configuration
+int zmk_input_processor_runtime_set_scaling(const struct device *dev, uint32_t multiplier,
+                                            uint32_t divisor,
+                                            enum zmk_input_processor_runtime_write_mode mode) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+
+    if (multiplier > 0) {
+        data->scale_multiplier = multiplier;
+        if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
+            data->persistent_scale_multiplier = multiplier;
+        }
+    }
+    if (divisor > 0) {
+        data->scale_divisor = divisor;
+        if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
+            data->persistent_scale_divisor = divisor;
+        }
+    }
+
+    LOG_INF("Set scaling to %d/%d%s", data->scale_multiplier, data->scale_divisor,
+            write_mode_label(mode));
+
+    return commit_write(dev, mode);
+}
+
+int zmk_input_processor_runtime_set_rotation(const struct device *dev, int32_t degrees,
+                                             enum zmk_input_processor_runtime_write_mode mode) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->rotation_degrees = degrees;
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
+        data->persistent_rotation_degrees = degrees;
+    }
+    update_rotation_values(data);
+
+    LOG_INF("Set rotation to %d degrees%s", degrees, write_mode_label(mode));
+
+    return commit_write(dev, mode);
+}
+
+int zmk_input_processor_runtime_reset(const struct device *dev) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    const struct runtime_processor_config *cfg = dev->config;
+
+    load_processor_defaults(dev);
 
     LOG_INF("Reset processor '%s' to defaults", cfg->name);
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    ret = schedule_save_processor_settings(dev);
-    // Raise event
-    raise_state_changed_event(dev);
-#endif
-
-    return ret;
+    return commit_write(dev, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_PERSIST);
 }
 
 void zmk_input_processor_runtime_restore_persistent(const struct device *dev) {
@@ -1124,6 +1163,35 @@ static int settings_initialized_listener(const zmk_event_t *eh) {
 ZMK_LISTENER(runtime_processor_settings_initialized_listener, settings_initialized_listener);
 ZMK_SUBSCRIPTION(runtime_processor_settings_initialized_listener, zmk_custom_settings_initialized);
 
+static int save_all_cb(const struct device *dev, void *user_data) {
+    ARG_UNUSED(user_data);
+    return save_processor_settings_now(dev);
+}
+
+/* Discard one processor's unsaved (memory) changes: cancel any pending
+ * debounced flush and reload the last-saved values from flash, falling back to
+ * devicetree defaults when nothing is saved. Mirrors custom-settings' discard. */
+static int discard_processor_settings_cb(const struct device *dev, void *user_data) {
+    ARG_UNUSED(user_data);
+    struct runtime_processor_data *data = dev->data;
+    const struct runtime_processor_config *cfg = dev->config;
+
+    // Reverting to the on-flash state; drop any pending debounced flush.
+    k_work_cancel_delayable(&data->save_work);
+
+    struct zmk_custom_setting_value value;
+    int ret = zmk_custom_setting_read_by_key(RIP_SETTINGS_SUBSYSTEM_ID, cfg->name, &value);
+    if (ret == 0 && value.type == ZMK_CUSTOM_SETTING_VALUE_TYPE_BYTES && value.size > 0 &&
+        unpack_and_apply_processor_settings(data, value.bytes_value, value.size) == 0) {
+        LOG_INF("Discarded unsaved changes for %s (reloaded from flash)", cfg->name);
+    } else {
+        load_processor_defaults(dev);
+        LOG_INF("Discarded unsaved changes for %s (no saved value, using defaults)", cfg->name);
+    }
+    raise_state_changed_event(dev);
+    return 0;
+}
+
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_TEST)
 /* Test-only: synchronously re-run the boot-apply logic (bypassing the
  * SYS_INIT delay) so a test can simulate "reload after reboot" by writing a
@@ -1136,6 +1204,34 @@ void zmk_input_processor_runtime_test_apply_persisted_settings(void) {
 #endif
 
 #endif // CONFIG_ZMK_CUSTOM_SETTINGS
+
+int zmk_input_processor_runtime_save_all(void) {
+#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
+    LOG_INF("Saving all processor settings to flash");
+    return zmk_input_processor_runtime_foreach(save_all_cb, NULL);
+#else
+    return 0;
+#endif
+}
+
+int zmk_input_processor_runtime_discard_all(void) {
+#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
+    LOG_INF("Discarding all unsaved processor settings");
+    return zmk_input_processor_runtime_foreach(discard_processor_settings_cb, NULL);
+#else
+    return 0;
+#endif
+}
+
+static int reset_all_cb(const struct device *dev, void *user_data) {
+    ARG_UNUSED(user_data);
+    return zmk_input_processor_runtime_reset(dev);
+}
+
+int zmk_input_processor_runtime_reset_all(void) {
+    LOG_INF("Resetting all processor settings to defaults");
+    return zmk_input_processor_runtime_foreach(reset_all_cb, NULL);
+}
 
 // Event listener for keycode changes (for timestamp tracking)
 static int keycode_state_changed_listener(const zmk_event_t *eh) {
@@ -1316,7 +1412,8 @@ ZMK_SUBSCRIPTION(runtime_processor_position_listener, zmk_position_state_changed
 // Temp-layer layer configuration API
 int zmk_input_processor_runtime_set_temp_layer(const struct device *dev, bool enabled,
                                                uint8_t layer, uint32_t activation_delay_ms,
-                                               uint32_t deactivation_delay_ms, bool persistent) {
+                                               uint32_t deactivation_delay_ms,
+                                               enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1328,7 +1425,7 @@ int zmk_input_processor_runtime_set_temp_layer(const struct device *dev, bool en
     data->temp_layer_activation_delay_ms = activation_delay_ms;
     data->temp_layer_deactivation_delay_ms = deactivation_delay_ms;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_temp_layer_enabled = enabled;
         data->persistent_temp_layer_layer = layer;
         data->persistent_temp_layer_activation_delay_ms = activation_delay_ms;
@@ -1337,23 +1434,13 @@ int zmk_input_processor_runtime_set_temp_layer(const struct device *dev, bool en
 
     LOG_INF("Temp-layer layer config: enabled=%d, layer=%d, act_delay=%d, "
             "deact_delay=%d%s",
-            enabled, layer, activation_delay_ms, deactivation_delay_ms,
-            persistent ? " (persistent)" : " (temporary)");
+            enabled, layer, activation_delay_ms, deactivation_delay_ms, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        // Raise event for persistent changes
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
-int zmk_input_processor_runtime_set_temp_layer_enabled(const struct device *dev, bool enabled,
-                                                       bool persistent) {
+int zmk_input_processor_runtime_set_temp_layer_enabled(
+    const struct device *dev, bool enabled, enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1361,25 +1448,17 @@ int zmk_input_processor_runtime_set_temp_layer_enabled(const struct device *dev,
     struct runtime_processor_data *data = dev->data;
     data->temp_layer_enabled = enabled;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_temp_layer_enabled = enabled;
     }
 
-    LOG_INF("Temp-layer enabled: %d%s", enabled, persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("Temp-layer enabled: %d%s", enabled, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
-int zmk_input_processor_runtime_set_temp_layer_layer(const struct device *dev, uint8_t layer,
-                                                     bool persistent) {
+int zmk_input_processor_runtime_set_temp_layer_layer(
+    const struct device *dev, uint8_t layer, enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1387,26 +1466,18 @@ int zmk_input_processor_runtime_set_temp_layer_layer(const struct device *dev, u
     struct runtime_processor_data *data = dev->data;
     data->temp_layer_layer = layer;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_temp_layer_layer = layer;
     }
 
-    LOG_INF("Temp-layer layer: %d%s", layer, persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("Temp-layer layer: %d%s", layer, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
-int zmk_input_processor_runtime_set_temp_layer_activation_delay(const struct device *dev,
-                                                                uint32_t activation_delay_ms,
-                                                                bool persistent) {
+int zmk_input_processor_runtime_set_temp_layer_activation_delay(
+    const struct device *dev, uint32_t activation_delay_ms,
+    enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1414,27 +1485,18 @@ int zmk_input_processor_runtime_set_temp_layer_activation_delay(const struct dev
     struct runtime_processor_data *data = dev->data;
     data->temp_layer_activation_delay_ms = activation_delay_ms;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_temp_layer_activation_delay_ms = activation_delay_ms;
     }
 
-    LOG_INF("Temp-layer activation delay: %dms%s", activation_delay_ms,
-            persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("Temp-layer activation delay: %dms%s", activation_delay_ms, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
-int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(const struct device *dev,
-                                                                  uint32_t deactivation_delay_ms,
-                                                                  bool persistent) {
+int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(
+    const struct device *dev, uint32_t deactivation_delay_ms,
+    enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1442,26 +1504,17 @@ int zmk_input_processor_runtime_set_temp_layer_deactivation_delay(const struct d
     struct runtime_processor_data *data = dev->data;
     data->temp_layer_deactivation_delay_ms = deactivation_delay_ms;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_temp_layer_deactivation_delay_ms = deactivation_delay_ms;
     }
 
-    LOG_INF("Temp-layer deactivation delay: %dms%s", deactivation_delay_ms,
-            persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("Temp-layer deactivation delay: %dms%s", deactivation_delay_ms, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
-int zmk_input_processor_runtime_set_active_layers(const struct device *dev, uint32_t layers,
-                                                  bool persistent) {
+int zmk_input_processor_runtime_set_active_layers(
+    const struct device *dev, uint32_t layers, enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1469,25 +1522,18 @@ int zmk_input_processor_runtime_set_active_layers(const struct device *dev, uint
     struct runtime_processor_data *data = dev->data;
     data->active_layers = layers;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_active_layers = layers;
     }
 
-    LOG_INF("Active layers: 0x%08x%s", layers, persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("Active layers: 0x%08x%s", layers, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
-int zmk_input_processor_runtime_set_axis_snap_mode(const struct device *dev, uint8_t mode,
-                                                   bool persistent) {
+int zmk_input_processor_runtime_set_axis_snap_mode(
+    const struct device *dev, uint8_t mode,
+    enum zmk_input_processor_runtime_write_mode write_mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1502,25 +1548,18 @@ int zmk_input_processor_runtime_set_axis_snap_mode(const struct device *dev, uin
     // Reset snap state when mode changes
     data->axis_snap_cross_axis_accum = 0;
 
-    if (persistent) {
+    if (write_mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_axis_snap_mode = mode;
     }
 
-    LOG_INF("Axis snap mode: %d%s", mode, persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("Axis snap mode: %d%s", mode, write_mode_label(write_mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, write_mode);
 }
 
-int zmk_input_processor_runtime_set_axis_snap_threshold(const struct device *dev,
-                                                        uint16_t threshold, bool persistent) {
+int zmk_input_processor_runtime_set_axis_snap_threshold(
+    const struct device *dev, uint16_t threshold,
+    enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1528,25 +1567,18 @@ int zmk_input_processor_runtime_set_axis_snap_threshold(const struct device *dev
     struct runtime_processor_data *data = dev->data;
     data->axis_snap_threshold = threshold;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_axis_snap_threshold = threshold;
     }
 
-    LOG_INF("Axis snap threshold: %d%s", threshold, persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("Axis snap threshold: %d%s", threshold, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
-int zmk_input_processor_runtime_set_axis_snap_timeout(const struct device *dev, uint16_t timeout_ms,
-                                                      bool persistent) {
+int zmk_input_processor_runtime_set_axis_snap_timeout(
+    const struct device *dev, uint16_t timeout_ms,
+    enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1554,27 +1586,18 @@ int zmk_input_processor_runtime_set_axis_snap_timeout(const struct device *dev, 
     struct runtime_processor_data *data = dev->data;
     data->axis_snap_timeout_ms = timeout_ms;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_axis_snap_timeout_ms = timeout_ms;
     }
 
-    LOG_INF("Axis snap timeout: %d ms%s", timeout_ms,
-            persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("Axis snap timeout: %d ms%s", timeout_ms, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
-int zmk_input_processor_runtime_set_axis_snap(const struct device *dev, uint8_t mode,
-                                              uint16_t threshold, uint16_t timeout_ms,
-                                              bool persistent) {
+int zmk_input_processor_runtime_set_axis_snap(
+    const struct device *dev, uint8_t mode, uint16_t threshold, uint16_t timeout_ms,
+    enum zmk_input_processor_runtime_write_mode write_mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1591,28 +1614,20 @@ int zmk_input_processor_runtime_set_axis_snap(const struct device *dev, uint8_t 
     // Reset snap state when configuration changes
     data->axis_snap_cross_axis_accum = 0;
 
-    if (persistent) {
+    if (write_mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_axis_snap_mode = mode;
         data->persistent_axis_snap_threshold = threshold;
         data->persistent_axis_snap_timeout_ms = timeout_ms;
     }
 
     LOG_INF("Axis snap config: mode=%d, threshold=%d, timeout=%d ms%s", mode, threshold, timeout_ms,
-            persistent ? " (persistent)" : " (temporary)");
+            write_mode_label(write_mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, write_mode);
 }
 
 int zmk_input_processor_runtime_set_x_invert(const struct device *dev, bool invert,
-                                             bool persistent) {
+                                             enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1620,26 +1635,17 @@ int zmk_input_processor_runtime_set_x_invert(const struct device *dev, bool inve
     struct runtime_processor_data *data = dev->data;
     data->x_invert = invert;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_x_invert = invert;
     }
 
-    LOG_INF("X axis invert: %s%s", invert ? "true" : "false",
-            persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("X axis invert: %s%s", invert ? "true" : "false", write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
 int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool invert,
-                                             bool persistent) {
+                                             enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1647,22 +1653,13 @@ int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool inve
     struct runtime_processor_data *data = dev->data;
     data->y_invert = invert;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_y_invert = invert;
     }
 
-    LOG_INF("Y axis invert: %s%s", invert ? "true" : "false",
-            persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("Y axis invert: %s%s", invert ? "true" : "false", write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
 void zmk_input_processor_runtime_temp_layer_keep_active(const struct device *dev,
@@ -1683,8 +1680,8 @@ void zmk_input_processor_runtime_temp_layer_keep_active(const struct device *dev
     }
 }
 
-int zmk_input_processor_runtime_set_xy_to_scroll_enabled(const struct device *dev, bool enabled,
-                                                         bool persistent) {
+int zmk_input_processor_runtime_set_xy_to_scroll_enabled(
+    const struct device *dev, bool enabled, enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1692,25 +1689,17 @@ int zmk_input_processor_runtime_set_xy_to_scroll_enabled(const struct device *de
     struct runtime_processor_data *data = dev->data;
     data->xy_to_scroll_enabled = enabled;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_xy_to_scroll_enabled = enabled;
     }
 
-    LOG_INF("XY-to-scroll enabled: %d%s", enabled, persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("XY-to-scroll enabled: %d%s", enabled, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }
 
-int zmk_input_processor_runtime_set_xy_swap_enabled(const struct device *dev, bool enabled,
-                                                    bool persistent) {
+int zmk_input_processor_runtime_set_xy_swap_enabled(
+    const struct device *dev, bool enabled, enum zmk_input_processor_runtime_write_mode mode) {
     if (!dev) {
         return -EINVAL;
     }
@@ -1718,19 +1707,11 @@ int zmk_input_processor_runtime_set_xy_swap_enabled(const struct device *dev, bo
     struct runtime_processor_data *data = dev->data;
     data->xy_swap_enabled = enabled;
 
-    if (persistent) {
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
         data->persistent_xy_swap_enabled = enabled;
     }
 
-    LOG_INF("XY-swap enabled: %d%s", enabled, persistent ? " (persistent)" : " (temporary)");
+    LOG_INF("XY-swap enabled: %d%s", enabled, write_mode_label(mode));
 
-    int ret = 0;
-#if IS_ENABLED(CONFIG_ZMK_CUSTOM_SETTINGS)
-    if (persistent) {
-        ret = schedule_save_processor_settings(dev);
-        raise_state_changed_event(dev);
-    }
-#endif
-
-    return ret;
+    return commit_write(dev, mode);
 }

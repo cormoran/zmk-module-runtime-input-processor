@@ -176,7 +176,8 @@ static int test_scaling_persists_across_reload(void) {
     uint32_t new_multiplier = before.scale_multiplier + 5;
     uint32_t new_divisor = before.scale_divisor + 3;
 
-    ret = zmk_input_processor_runtime_set_scaling(dev, new_multiplier, new_divisor, true);
+    ret = zmk_input_processor_runtime_set_scaling(dev, new_multiplier, new_divisor,
+                                                  ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_PERSIST);
     if (ret < 0) {
         LOG_ERR("set_scaling failed: %d", ret);
         return ret;
@@ -221,6 +222,88 @@ static int test_scaling_persists_across_reload(void) {
     return 0;
 }
 
+/* Exercises the write modes and the save/discard-all operations:
+ *  - a WRITE_MODE_MEMORY write updates the baseline in RAM but must NOT reach
+ *    flash, so discard_all (reload from flash) reverts it;
+ *  - a subsequent save_all flushes the in-RAM baseline to flash so it then
+ *    survives a settings reload.
+ * Uses rotation (independent of the scaling the first test leaves persisted).
+ */
+static int test_write_modes_and_save_discard(void) {
+    const struct device *dev = zmk_input_processor_runtime_find_by_name(TEST_PROCESSOR_NAME);
+    if (!dev) {
+        LOG_ERR("Test processor '%s' not found", TEST_PROCESSOR_NAME);
+        return -ENODEV;
+    }
+
+    // Establish a known persisted baseline (persist + flush to the backend).
+    const int32_t persisted_rot = 11;
+    int ret = zmk_input_processor_runtime_set_rotation(
+        dev, persisted_rot, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_PERSIST);
+    if (ret < 0) {
+        return ret;
+    }
+    zmk_input_processor_runtime_test_flush_save(dev);
+
+    // MEMORY write: updates the baseline in RAM only (visible via get_config)
+    // but must not touch flash.
+    const int32_t memory_rot = persisted_rot + 7;
+    ret = zmk_input_processor_runtime_set_rotation(dev, memory_rot,
+                                                   ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_MEMORY);
+    if (ret < 0) {
+        return ret;
+    }
+
+    struct zmk_input_processor_runtime_config cfg;
+    zmk_input_processor_runtime_get_config(dev, NULL, &cfg);
+    if (cfg.rotation_degrees != memory_rot) {
+        LOG_ERR("Memory write not staged: got %d expected %d", cfg.rotation_degrees, memory_rot);
+        return -EINVAL;
+    }
+
+    // discard_all must drop the unsaved memory change and revert to flash.
+    ret = zmk_input_processor_runtime_discard_all();
+    if (ret < 0) {
+        return ret;
+    }
+    zmk_input_processor_runtime_get_config(dev, NULL, &cfg);
+    if (cfg.rotation_degrees != persisted_rot) {
+        LOG_ERR("Discard did not revert memory write: got %d expected %d", cfg.rotation_degrees,
+                persisted_rot);
+        return -EINVAL;
+    }
+
+    // A memory write followed by save_all must survive a settings reload.
+    const int32_t saved_rot = persisted_rot + 3;
+    ret = zmk_input_processor_runtime_set_rotation(dev, saved_rot,
+                                                   ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_MEMORY);
+    if (ret < 0) {
+        return ret;
+    }
+    ret = zmk_input_processor_runtime_save_all();
+    if (ret < 0) {
+        return ret;
+    }
+
+    // Clobber the live struct, reload from the backend, re-apply.
+    zmk_input_processor_runtime_reset(dev);
+    ret = settings_load_subtree("custom_settings");
+    if (ret < 0) {
+        return ret;
+    }
+    zmk_input_processor_runtime_test_apply_persisted_settings();
+
+    zmk_input_processor_runtime_get_config(dev, NULL, &cfg);
+    if (cfg.rotation_degrees != saved_rot) {
+        LOG_ERR("save_all did not persist memory value: got %d expected %d", cfg.rotation_degrees,
+                saved_rot);
+        return -EINVAL;
+    }
+
+    LOG_INF("PASS: rip_settings_write_modes rot=%d", cfg.rotation_degrees);
+    return 0;
+}
+
 static int rip_settings_test_init(void) {
     int ret = test_settings_backend_init();
     if (ret < 0) {
@@ -231,6 +314,11 @@ static int rip_settings_test_init(void) {
     ret = test_scaling_persists_across_reload();
     if (ret < 0) {
         LOG_ERR("FAIL: rip_settings_persist_reload ret=%d", ret);
+    }
+
+    ret = test_write_modes_and_save_discard();
+    if (ret < 0) {
+        LOG_ERR("FAIL: rip_settings_write_modes ret=%d", ret);
     }
     return 0;
 }

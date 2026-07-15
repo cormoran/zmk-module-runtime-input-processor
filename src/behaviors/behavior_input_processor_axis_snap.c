@@ -59,7 +59,7 @@ static int on_keymap_binding_pressed(struct zmk_behavior_binding *binding,
     // Apply temporary axis snap configuration (non-persistent)
     int ret =
         zmk_input_processor_runtime_set_axis_snap(data->processor, snap_mode, threshold, timeout_ms,
-                                                  false); // temporary
+                                                  ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY);
     if (ret < 0) {
         LOG_ERR("Failed to set temporary axis snap: %d", ret);
         return ret;

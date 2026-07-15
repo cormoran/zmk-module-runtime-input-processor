@@ -1,2 +1,3 @@
 cormoran_rip, Security: Unsecured
 PASS: rip_settings_persist_reload scale=6/4
+PASS: rip_settings_write_modes rot=14
