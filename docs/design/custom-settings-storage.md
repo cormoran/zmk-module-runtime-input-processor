@@ -120,15 +120,19 @@ persistent path already calls it — leave those call sites alone.
 custom-settings' load handler populates its own RAM value during `settings_load()`
 (called from ZMK `main()` **after all SYS_INIT levels**) and does **not** raise a
 `zmk_custom_setting_changed` event on load. So the persisted value is only readable
-*after* boot completes. This is the documented ecosystem hazard; the sanctioned
-pattern (see `zmk-feature-default-layer/src/default_layer.c` `default_layer_init`,
-and `zmk-driver-animation` / pmw3610 boot-apply comments) is:
+*after* boot completes, and an ordinary `SYS_INIT` hook is too early. The sanctioned
+hook is the **`zmk_custom_settings_initialized`** event, which custom-settings raises
+exactly once right after that boot `settings_load` pass finishes (i.e. once every
+persisted value is populated and readable):
 
-- An `APPLICATION`-level `SYS_INIT` that **submits a `k_work`** (does not apply
-  inline). The work handler runs on the system workqueue after `main()` has done
-  `settings_load()`, so `zmk_custom_setting_read_by_key(...)` returns the persisted
-  value.
-- The work handler iterates all processors (`zmk_input_processor_runtime_foreach`),
+- A `ZMK_LISTENER` / `ZMK_SUBSCRIPTION(zmk_custom_settings_initialized)` runs the
+  apply once the event fires. The event is dispatched synchronously from
+  custom-settings' boot settings-commit, which does **not** hold
+  `custom_settings_lock`, so `zmk_custom_setting_read_by_key(...)` reads back the
+  persisted value without deadlocking. (An earlier revision used an
+  `APPLICATION`-level `SYS_INIT` that submitted a delayed `k_work` to sidestep the
+  race; the event replaces that guess-a-delay hack with a deterministic signal.)
+- The listener iterates all processors (`zmk_input_processor_runtime_foreach`),
   reads each one's blob, and if present unpacks into `data->persistent_*` **and**
   the current active values, then `update_rotation_values(data)` — exactly what the
   old `load_processor_settings_cb` did.

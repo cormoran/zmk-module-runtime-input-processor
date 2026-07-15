@@ -10,7 +10,6 @@
 #include <math.h>
 #include <zephyr/device.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
-#include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/dlist.h>
@@ -1064,11 +1063,11 @@ int zmk_input_processor_runtime_get_id(const struct device *dev) {
 /*
  * Boot-apply: reads each processor's persisted blob (if any) back from
  * custom-settings and applies it. custom-settings' settings_load() runs from
- * ZMK main() after all SYS_INIT levels and does not raise a
- * zmk_custom_setting_changed event, so the persisted value is not
- * necessarily readable yet at an ordinary SYS_INIT hook - the SYS_INIT below
- * only *schedules* this on the system workqueue with a delay, mirroring
- * zmk-feature-default-layer's default_layer_init. No
+ * ZMK main() after all SYS_INIT levels, so the persisted value is not yet
+ * readable at an ordinary SYS_INIT hook. The apply is instead driven by the
+ * zmk_custom_settings_initialized event (see the listener below), which
+ * custom-settings raises exactly once, right after that boot settings_load
+ * pass completes - i.e. once every persisted value is readable. No
  * zmk_custom_setting_changed listener is registered (see
  * docs/design/custom-settings-storage.md, "Design A"): the device is the
  * runtime source of truth and this module's own Studio RPC handlers already
@@ -1108,19 +1107,22 @@ static int apply_persisted_settings_cb(const struct device *dev, void *user_data
     return 0;
 }
 
-static void runtime_processor_boot_apply_work_handler(struct k_work *work) {
-    ARG_UNUSED(work);
+/* custom-settings raises zmk_custom_settings_initialized exactly once, after
+ * the boot settings_load has populated every persisted value - the point at
+ * which apply_persisted_settings_cb can read effective (persisted) values
+ * rather than compile-time defaults. The event is dispatched synchronously
+ * from custom-settings' boot settings-commit, which does not hold
+ * custom_settings_lock, so reading settings back here is safe. */
+static int settings_initialized_listener(const zmk_event_t *eh) {
+    if (as_zmk_custom_settings_initialized(eh) == NULL) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
     zmk_input_processor_runtime_foreach(apply_persisted_settings_cb, NULL);
+    return ZMK_EV_EVENT_BUBBLE;
 }
 
-static K_WORK_DELAYABLE_DEFINE(runtime_processor_boot_apply_work,
-                               runtime_processor_boot_apply_work_handler);
-
-static int runtime_processor_settings_boot_init(void) {
-    k_work_schedule(&runtime_processor_boot_apply_work, K_MSEC(200));
-    return 0;
-}
-SYS_INIT(runtime_processor_settings_boot_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+ZMK_LISTENER(runtime_processor_settings_initialized_listener, settings_initialized_listener);
+ZMK_SUBSCRIPTION(runtime_processor_settings_initialized_listener, zmk_custom_settings_initialized);
 
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_TEST)
 /* Test-only: synchronously re-run the boot-apply logic (bypassing the
