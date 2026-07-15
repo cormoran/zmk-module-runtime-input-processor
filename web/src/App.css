@@ -202,6 +202,42 @@
   margin: 0;
 }
 
+.template-credit {
+  font-size: 0.85rem;
+}
+
+.connect-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.hint-message {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.locked-banner {
+  padding: 0.5rem 0.75rem;
+  margin: 1rem 0;
+  border: 1px solid #e0a800;
+  border-radius: 4px;
+  background: #fff8e1;
+}
+
+.locked-banner p {
+  margin: 0;
+}
+
+.unlock-prompt {
+  margin-top: 1rem;
+}
+
+.unlock-prompt p {
+  margin-top: 0;
+}
+
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
   .app {
@@ -281,5 +317,14 @@
   .app-footer {
     border-top-color: #444;
     color: #aaa;
+  }
+
+  .hint-message {
+    color: #aaa;
+  }
+
+  .locked-banner {
+    background: #3d3315;
+    border-color: #e0a800;
   }
 }

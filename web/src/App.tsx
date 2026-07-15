@@ -3,13 +3,18 @@
  * Demonstrates custom RPC communication with a ZMK device
  */
 
-import { useContext, useState, useEffect, useMemo, useCallback } from "react";
+import { useContext, useState, useEffect, useCallback, useRef } from "react";
 import "./App.css";
-import { connect as serial_connect } from "@zmkfirmware/zmk-studio-ts-client/transport/serial";
+import { connect as gattConnect } from "@zmkfirmware/zmk-studio-ts-client/transport/gatt";
 import {
   ZMKConnection,
-  ZMKCustomSubsystem,
   ZMKAppContext,
+  useStudioLockState,
+  isUnlockRequiredError,
+  isWebSerialSupported,
+  isWebBluetoothSupported,
+  useCustomSubsystem,
+  connectSerial,
 } from "@cormoran/zmk-studio-react-hook";
 import {
   Request,
@@ -23,6 +28,12 @@ import {
 // Custom subsystem identifier - must match firmware registration
 export const SUBSYSTEM_IDENTIFIER = "cormoran_rip";
 
+export const GITHUB_REPO = "cormoran/zmk-module-runtime-input-processor";
+
+// Always credits the original template project this module was built from,
+// regardless of GITHUB_REPO above.
+export const TEMPLATE_CREDIT_REPO = "cormoran/zmk-module-template";
+
 function App() {
   return (
     <div className="app">
@@ -32,6 +43,7 @@ function App() {
       </header>
 
       <ZMKConnection
+        autoReconnect
         renderDisconnected={({ connect, isLoading, error }) => (
           <section className="card">
             <h2>Device Connection</h2>
@@ -42,12 +54,43 @@ function App() {
               </div>
             )}
             {!isLoading && (
-              <button
-                className="btn btn-primary"
-                onClick={() => connect(serial_connect)}
-              >
-                🔌 Connect Serial
-              </button>
+              <>
+                <div className="connect-buttons">
+                  {isWebSerialSupported() && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => connect(connectSerial)}
+                    >
+                      🔌 Connect USB
+                    </button>
+                  )}
+                  {isWebBluetoothSupported() && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => connect(gattConnect)}
+                    >
+                      📶 Connect Bluetooth
+                    </button>
+                  )}
+                  {!isWebSerialSupported() && !isWebBluetoothSupported() && (
+                    <div className="warning-message">
+                      <p>
+                        ⚠️ Web Serial and Web Bluetooth are unavailable here.
+                        Use a Chromium-based browser (Chrome, Edge, ...) over
+                        HTTPS or localhost to connect to your keyboard.
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {isWebBluetoothSupported() && (
+                  <p className="hint-message">
+                    📶 Not showing up? Some firmware only advertises the Studio
+                    Bluetooth service once unlocked — press the unlock key (
+                    <code>&amp;studio_unlock</code> behavior) on your keyboard,
+                    then try connecting again.
+                  </p>
+                )}
+              </>
             )}
           </section>
         )}
@@ -72,6 +115,33 @@ function App() {
         <p>
           <strong>Runtime Input Processor Module</strong> - Configure pointing
           device behavior
+        </p>
+        <p>
+          <a
+            href={`https://github.com/${GITHUB_REPO}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {GITHUB_REPO}
+          </a>
+        </p>
+        <p className="template-credit">
+          Built from{" "}
+          <a
+            href={`https://github.com/${TEMPLATE_CREDIT_REPO}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {TEMPLATE_CREDIT_REPO}
+          </a>{" "}
+          - AI ready ZMK module template by{" "}
+          <a
+            href="https://github.com/cormoran"
+            target="_blank"
+            rel="noreferrer"
+          >
+            @cormoran
+          </a>
         </p>
       </footer>
     </div>
@@ -130,34 +200,37 @@ export function InputProcessorManager() {
     WriteMode.WRITE_MODE_PERSIST
   );
 
-  const subsystem = useMemo(
-    () => zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [zmkApp?.state.customSubsystems]
-  );
+  const { ready, subsystem, call } = useCustomSubsystem(SUBSYSTEM_IDENTIFIER, {
+    encode: (r: Request) => Request.encode(r).finish(),
+    decode: Response.decode,
+  });
+  const { locked } = useStudioLockState();
+
+  // Studio's unlock requirement is per-request: when a mutating/reading call
+  // fails with UNLOCK_REQUIRED, remember how to retry it and surface the
+  // unlock prompt below. Once the device reports it's unlocked again (see the
+  // effect further down), the last such action is retried automatically --
+  // this module's own `cormoran_rip` subsystem is unsecured today, but this
+  // keeps the web UI working unmodified if it's ever secured.
+  const [awaitingUnlock, setAwaitingUnlock] = useState(false);
+  const pendingRetryRef = useRef<(() => void) | null>(null);
+
+  const requestUnlockRetry = useCallback((retry: () => void) => {
+    pendingRetryRef.current = retry;
+    setAwaitingUnlock(true);
+  }, []);
 
   const callRPC = useCallback(
     async (request: Request): Promise<Response | null> => {
-      if (!zmkApp?.state.connection || !subsystem) return null;
+      if (!ready) return null;
       try {
-        const service = new ZMKCustomSubsystem(
-          zmkApp.state.connection,
-          subsystem.index
-        );
-
-        const payload = Request.encode(request).finish();
-        const responsePayload = await service.callRPC(payload);
-
-        if (responsePayload) {
-          return Response.decode(responsePayload);
-        }
+        return await call(request);
       } catch (err) {
         console.error("RPC call failed:", err);
         throw err;
       }
-      return null;
     },
-    [zmkApp?.state.connection, subsystem]
+    [ready, call]
   );
 
   const loadProcessors = useCallback(async () => {
@@ -176,13 +249,19 @@ export function InputProcessorManager() {
       }
       // Response is empty - processors will arrive via notifications
     } catch (err) {
+      if (isUnlockRequiredError(err)) {
+        requestUnlockRetry(() => {
+          void loadProcessors();
+        });
+        return;
+      }
       setError(
         `Failed to load processors: ${err instanceof Error ? err.message : "Unknown error"}`
       );
     } finally {
       setIsLoading(false);
     }
-  }, [callRPC]);
+  }, [callRPC, requestUnlockRetry]);
 
   const loadLayerInfo = useCallback(async () => {
     try {
@@ -197,9 +276,15 @@ export function InputProcessorManager() {
         console.error("Failed to load layer info:", resp.error.message);
       }
     } catch (err) {
+      if (isUnlockRequiredError(err)) {
+        requestUnlockRetry(() => {
+          void loadLayerInfo();
+        });
+        return;
+      }
       console.error("Failed to load layer info:", err);
     }
-  }, [callRPC]);
+  }, [callRPC, requestUnlockRetry]);
 
   const updateProcessor = useCallback(async () => {
     if (selectedProcessorId === null) return;
@@ -462,6 +547,12 @@ export function InputProcessorManager() {
 
       // Updates will come via notifications
     } catch (err) {
+      if (isUnlockRequiredError(err)) {
+        requestUnlockRetry(() => {
+          void updateProcessor();
+        });
+        return;
+      }
       setError(
         `Failed to update processor: ${err instanceof Error ? err.message : "Unknown error"}`
       );
@@ -471,6 +562,7 @@ export function InputProcessorManager() {
     }
   }, [
     callRPC,
+    requestUnlockRetry,
     processors,
     selectedProcessorId,
     scaleMultiplier,
@@ -562,6 +654,18 @@ export function InputProcessorManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subsystem]);
 
+  // Auto-retry once the device reports it's unlocked again -- covers the
+  // common case where the user presses &studio_unlock after seeing the
+  // prompt below without needing to click "Retry" themselves.
+  useEffect(() => {
+    if (awaitingUnlock && !locked && pendingRetryRef.current) {
+      const retry = pendingRetryRef.current;
+      pendingRetryRef.current = null;
+      setAwaitingUnlock(false);
+      retry();
+    }
+  }, [locked, awaitingUnlock]);
+
   // Subscribe to notifications for processor changes
   useEffect(() => {
     if (!zmkApp || !subsystem) return;
@@ -647,7 +751,11 @@ export function InputProcessorManager() {
         <div className="warning-message">
           <p>
             ⚠️ Subsystem "{SUBSYSTEM_IDENTIFIER}" not found. Make sure your
-            firmware includes the runtime input processor module.
+            firmware includes the{" "}
+            <a href={`https://github.com/${GITHUB_REPO}#readme`}>
+              runtime input processor module
+            </a>
+            .
           </p>
         </div>
       </section>
@@ -664,6 +772,28 @@ export function InputProcessorManager() {
           </div>
         )}
 
+        {locked && (
+          <div className="locked-banner">
+            <p>🔒 ZMK Studio is locked.</p>
+          </div>
+        )}
+
+        {awaitingUnlock && (
+          <div className="unlock-prompt card">
+            <p>
+              🔒 ZMK Studio is locked. Press the unlock key (
+              <code>&amp;studio_unlock</code> behavior) on your keyboard — the
+              request will retry automatically.
+            </p>
+            <button
+              className="btn btn-secondary"
+              onClick={() => pendingRetryRef.current?.()}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         <div
           style={{
             marginBottom: "1rem",
@@ -675,14 +805,14 @@ export function InputProcessorManager() {
           <button
             className="btn btn-primary"
             onClick={loadProcessors}
-            disabled={isLoading}
+            disabled={isLoading || locked}
           >
             {isLoading ? "⏳ Loading..." : "🔄 Refresh List"}
           </button>
           <button
             className="btn btn-secondary"
             onClick={saveAllSettings}
-            disabled={isLoading}
+            disabled={isLoading || locked}
             title="Persist every processor's current settings to flash"
           >
             💾 Save All
@@ -690,7 +820,7 @@ export function InputProcessorManager() {
           <button
             className="btn btn-secondary"
             onClick={discardAllSettings}
-            disabled={isLoading}
+            disabled={isLoading || locked}
             title="Drop unsaved changes and reload the saved values"
           >
             ↩️ Discard All
@@ -698,7 +828,7 @@ export function InputProcessorManager() {
           <button
             className="btn btn-secondary"
             onClick={resetAllSettings}
-            disabled={isLoading}
+            disabled={isLoading || locked}
             title="Reset every processor to its devicetree defaults"
           >
             🗑️ Reset All
@@ -1225,7 +1355,7 @@ export function InputProcessorManager() {
           <button
             className="btn btn-primary"
             onClick={updateProcessor}
-            disabled={isLoading}
+            disabled={isLoading || locked}
           >
             {isLoading ? "⏳ Applying..." : "✅ Apply Settings"}
           </button>

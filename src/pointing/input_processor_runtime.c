@@ -738,6 +738,10 @@ static int runtime_processor_init(const struct device *dev) {
     return 0;
 }
 
+// Forward declaration (defined later in this file) so the change notification
+// below can report the correct processor id.
+int zmk_input_processor_runtime_get_id(const struct device *dev);
+
 // Helper to raise state changed event
 static void raise_state_changed_event(const struct device *dev) {
     const char *name;
@@ -748,8 +752,16 @@ static void raise_state_changed_event(const struct device *dev) {
         return;
     }
 
-    raise_zmk_input_processor_state_changed(
-        (struct zmk_input_processor_state_changed){.name = name, .config = config});
+    // BUGFIX: the original omitted .id, so every change notification carried
+    // id=0 and the Studio web UI overwrote whichever processor is id 0
+    // (e.g. editing "left" clobbered "right"). Report the real id instead.
+    int id = zmk_input_processor_runtime_get_id(dev);
+    if (id < 0) {
+        return;
+    }
+
+    raise_zmk_input_processor_state_changed((struct zmk_input_processor_state_changed){
+        .id = (uint8_t)id, .name = name, .config = config});
 }
 
 // Human-readable suffix for the setter LOG lines (leading space + parens so the
@@ -825,6 +837,7 @@ static void load_processor_defaults(const struct device *dev) {
         data->temp_layer_layer_active = false;
     }
 
+    // Reset axis snap settings to defaults
     data->axis_snap_mode = cfg->initial_axis_snap_mode;
     data->axis_snap_threshold = cfg->initial_axis_snap_threshold;
     data->axis_snap_timeout_ms = cfg->initial_axis_snap_timeout_ms;
@@ -833,11 +846,13 @@ static void load_processor_defaults(const struct device *dev) {
     data->persistent_axis_snap_timeout_ms = cfg->initial_axis_snap_timeout_ms;
     data->axis_snap_cross_axis_accum = 0;
 
+    // Reset code mapping settings to defaults
     data->xy_to_scroll_enabled = cfg->initial_xy_to_scroll_enabled;
     data->xy_swap_enabled = cfg->initial_xy_swap_enabled;
     data->persistent_xy_to_scroll_enabled = cfg->initial_xy_to_scroll_enabled;
     data->persistent_xy_swap_enabled = cfg->initial_xy_swap_enabled;
 
+    // Reset axis invert settings to defaults
     data->x_invert = cfg->initial_x_invert;
     data->y_invert = cfg->initial_y_invert;
     data->persistent_x_invert = cfg->initial_x_invert;
@@ -927,6 +942,10 @@ void zmk_input_processor_runtime_restore_persistent(const struct device *dev) {
     // Reset snap state when restoring
     data->axis_snap_cross_axis_accum = 0;
     data->axis_snap_last_decay_timestamp = 0;
+
+    // Restore code mapping settings
+    data->xy_to_scroll_enabled = data->persistent_xy_to_scroll_enabled;
+    data->xy_swap_enabled = data->persistent_xy_swap_enabled;
 
     // Restore axis invert settings
     data->x_invert = data->persistent_x_invert;
