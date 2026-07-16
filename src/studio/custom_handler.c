@@ -8,14 +8,13 @@
 #include <cormoran/rip/custom.pb.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
-#include <zephyr/init.h>
-#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/input_processor_state_changed.h>
 #include <zmk/keymap.h>
 #include <zmk/pointing/input_processor_runtime.h>
 #include <zmk/studio/custom.h>
+#include <zmk/workqueue.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR)
@@ -204,35 +203,20 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
 }
 
 /*
- * List runs on a dedicated, low-priority work queue owned by this module rather
- * than ZMK's shared low-priority queue: raising a state-changed event encodes a
- * full InputProcessorInfo notification, which overflows the shared low-priority
- * thread's small (CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE, 768 B by default)
- * stack and faults. A private queue lets us size the stack for that encode
- * while still keeping this work off the system work queue and at low priority.
- * The priority tracks ZMK's own low-priority thread so we don't outrank it.
- */
-#define RIP_LIST_WORKQ_STACK_SIZE 2048
-K_THREAD_STACK_DEFINE(rip_list_workq_stack, RIP_LIST_WORKQ_STACK_SIZE);
-static struct k_work_q rip_list_workq;
-
-static int rip_list_workq_init(void) {
-    k_work_queue_init(&rip_list_workq);
-    k_work_queue_start(&rip_list_workq, rip_list_workq_stack,
-                       K_THREAD_STACK_SIZEOF(rip_list_workq_stack),
-                       CONFIG_ZMK_LOW_PRIORITY_THREAD_PRIORITY, NULL);
-    return 0;
-}
-SYS_INIT(rip_list_workq_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
-
-/*
  * List emits one state-changed notification per processor, but does so one
- * processor per work item on the low-priority work queue, re-submitting itself
- * for the next. This avoids monopolizing a work-queue thread when many
- * processors are registered and paces the notifications through the Studio RPC
- * TX path (which stalls on bursts of back-to-back notifications). The index is
- * the processor id (its index in the registry); find_by_id returns NULL past
- * the end, which ends the chain.
+ * processor per work item on ZMK's shared low-priority work queue,
+ * re-submitting itself for the next. This avoids monopolizing a work-queue
+ * thread when many processors are registered and paces the notifications
+ * through the Studio RPC TX path (which stalls on bursts of back-to-back
+ * notifications). The index is the processor id (its index in the registry);
+ * find_by_id returns NULL past the end, which ends the chain.
+ *
+ * NOTE: raising the state-changed event synchronously encodes a full
+ * InputProcessorInfo notification down through ZMK's Studio-RPC core, which
+ * needs more stack than the low-priority thread's 768 B default. This module
+ * therefore requires CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE to be raised
+ * (see the module's tests/zmk-config and README) - too small a stack faults
+ * with an MPU stack-guard (MemManage) exception the first time List runs.
  */
 static size_t list_processors_next_index;
 
@@ -255,7 +239,7 @@ static void list_input_processors_work_handler(struct k_work *work) {
     // Yield the thread and continue with the next processor on a fresh work
     // item rather than looping here.
     list_processors_next_index++;
-    k_work_submit_to_queue(&rip_list_workq, work);
+    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), work);
 }
 
 K_WORK_DEFINE(list_input_processors_work, list_input_processors_work_handler);
@@ -267,7 +251,7 @@ static int handle_list_input_processors(const cormoran_rip_ListInputProcessorsRe
                                         cormoran_rip_Response *resp) {
     // (Re)start the paced enumeration from the first processor.
     list_processors_next_index = 0;
-    k_work_submit_to_queue(&rip_list_workq, &list_input_processors_work);
+    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &list_input_processors_work);
 
     // Return empty response (notifications sent via events contain the data)
     resp->which_response_type = cormoran_rip_Response_list_input_processors_tag;

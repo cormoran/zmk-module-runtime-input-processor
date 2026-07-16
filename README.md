@@ -52,7 +52,18 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR=y
 # Enable studio custom RPC features for web UI
 CONFIG_ZMK_STUDIO=y
 CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
+
+# Required when the Studio RPC is enabled: "Refresh List" paces its
+# per-processor notifications on ZMK's shared low-priority work queue, and
+# encoding a notification through the Studio RPC core needs more than that
+# thread's 768-byte default stack. A build without this raise will fault
+# (MPU stack guard) the first time the web UI lists processors.
+CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE=2048
 ```
+
+> A module cannot raise this shared thread's stack for you (a ZMK Kconfig
+> `default` in your config wins over the module's), so it must live in your
+> keyboard config as shown above.
 
 `CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR` automatically selects `CONFIG_ZMK_CUSTOM_SETTINGS`
 (from [zmk-feature-custom-settings](https://github.com/cormoran/zmk-feature-custom-settings)),
