@@ -480,16 +480,23 @@ static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
 
 /*
  * Persistence backend: one zmk-feature-custom-settings entry per processor
- * (subsystem "cormoran__rip", key = the processor's compile-time
+ * (subsystem "cormoran_rip", key = the processor's compile-time
  * processor-label), storing a version-byte-prefixed raw memcpy of the 15
  * persisted fields. See docs/design/custom-settings-storage.md.
- * Using a double-underscore subsystem id keeps this separate from the
- * module's own Studio RPC custom subsystem ("cormoran_rip", single
- * underscore, see src/studio/custom_handler.c) - this storage subsystem is
- * DEVICE_PRIVATE so it is never listed/edited by a generic custom-settings
- * RPC surface; this module's own RPC handlers remain the only editor.
+ *
+ * This id MUST match a registered ZMK_RPC_CUSTOM_SUBSYSTEM identifier: the
+ * generic custom-settings ListSettings handler resolves every entry's
+ * custom_subsystem_id to a registered subsystem index and silently drops any
+ * entry whose id does not resolve (see setting_to_proto in
+ * zmk-feature-custom-settings). We therefore reuse this module's own Studio RPC
+ * subsystem id "cormoran_rip" (see src/studio/custom_handler.c) rather than a
+ * separate namespace, so these entries appear in the generic list.
+ *
+ * Confidentiality stays DEVICE_PRIVATE: that only suppresses the *value* over
+ * the generic RPC (not the list entry itself), so the key/meta are visible for
+ * inspection while this module's own RPC handlers remain the only editor.
  */
-#define RIP_SETTINGS_SUBSYSTEM_ID "cormoran__rip"
+#define RIP_SETTINGS_SUBSYSTEM_ID "cormoran_rip"
 #define RIP_SETTINGS_BLOB_VERSION 1
 
 /*

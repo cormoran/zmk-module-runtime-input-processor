@@ -51,15 +51,24 @@ settings would create a redundant second surface; a single opaque blob per
 processor is the minimal, closest analogue of today's single-struct-per-processor
 storage and avoids 15×N registration boilerplate.
 
-- Subsystem id: `"cormoran__rip"` (≤ `CONFIG_ZMK_CUSTOM_SETTINGS_CUSTOM_SUBSYSTEM_ID_MAX_LEN`=32).
+- Subsystem id: `"cormoran_rip"` (≤ `CONFIG_ZMK_CUSTOM_SETTINGS_CUSTOM_SUBSYSTEM_ID_MAX_LEN`=32).
+  This MUST equal a registered `ZMK_RPC_CUSTOM_SUBSYSTEM` identifier — the generic
+  custom-settings `ListSettings` handler resolves each entry's `custom_subsystem_id`
+  to a registered subsystem index and silently drops any entry whose id does not
+  resolve. We reuse this module's own Studio RPC subsystem id (`"cormoran_rip"`,
+  registered in `src/studio/custom_handler.c`) so the entries resolve and appear
+  in the generic list.
 - Key: the processor's `processor_label` DT string literal (already ≤
   `CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_NAME_MAX_LEN`, well under
   `CONFIG_ZMK_CUSTOM_SETTINGS_KEY_MAX_LEN`=48). No runtime key buffer needed —
   unlike pmw3610's `<field>@<id>`, our key is a compile-time DT literal.
 - Value type: `ZMK_CUSTOM_SETTING_VALUE_TYPE_BYTES`.
-- **Confidentiality: `ZMK_CUSTOM_SETTING_CONFIDENTIALITY_DEVICE_PRIVATE`** — so if
-  a firmware also enables custom-settings' *generic* Studio RPC, these entries are
-  never listed/edited/exported there. This module's own RPC stays the sole editor.
+- **Confidentiality: `ZMK_CUSTOM_SETTING_CONFIDENTIALITY_DEVICE_PRIVATE`** — this
+  suppresses only the *value* over the generic Studio RPC, not the list entry
+  itself (`DEVICE_PRIVATE` gates `can_include_value`, not list membership). So if a
+  firmware also enables the generic RPC, these entries still appear in its list
+  (key + meta, no value) for inspection, but cannot be edited/exported there — this
+  module's own RPC stays the sole editor.
 - Default value: an empty (zero-length) `ZMK_CUSTOM_SETTING_VALUE_BYTES()`, meaning
   "nothing persisted → keep DT defaults".
 - Size: the blob is `1 + sizeof(struct rip_persist_v1)` (~40 bytes for the 15
@@ -108,7 +117,7 @@ with the old `settings_save_one` blob.
 Keep the existing per-processor debounced `k_work_delayable save_work` (coalesces
 Studio slider spam). Its handler now:
 1. Packs `data->persistent_*` into the blob buffer above.
-2. `zmk_custom_setting_write_by_key("cormoran__rip", cfg->name, &bytes_value,
+2. `zmk_custom_setting_write_by_key("cormoran_rip", cfg->name, &bytes_value,
    ZMK_CUSTOM_SETTING_WRITE_MODE_PERSIST)`.
 
 `schedule_save_processor_settings()` is unchanged (still reschedules `save_work`
