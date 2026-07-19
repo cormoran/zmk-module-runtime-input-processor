@@ -14,6 +14,7 @@
 #include <zmk/keymap.h>
 #include <zmk/pointing/input_processor_runtime.h>
 #include <zmk/studio/custom.h>
+#include <zmk/workqueue.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR)
@@ -34,6 +35,20 @@ static struct zmk_rpc_custom_subsystem_meta rip_feature_meta = {
 ZMK_RPC_CUSTOM_SUBSYSTEM(cormoran_rip, &rip_feature_meta, rip_rpc_handle_request);
 
 ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(cormoran_rip, cormoran_rip_Response);
+
+/* Map the proto write mode onto the firmware write mode. An unset field decodes
+ * to WRITE_MODE_PERSIST (proto3 default 0), preserving the historical
+ * always-persist behavior for older clients. */
+static enum zmk_input_processor_runtime_write_mode rip_write_mode(cormoran_rip_WriteMode mode) {
+    switch (mode) {
+    case cormoran_rip_WriteMode_WRITE_MODE_MEMORY:
+        return ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_MEMORY;
+    case cormoran_rip_WriteMode_WRITE_MODE_TEMPORARY:
+        return ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY;
+    default:
+        return ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_PERSIST;
+    }
+}
 
 static int handle_list_input_processors(const cormoran_rip_ListInputProcessorsRequest *req,
                                         cormoran_rip_Response *resp);
@@ -74,6 +89,12 @@ static int handle_set_x_invert(const cormoran_rip_SetXInvertRequest *req,
                                cormoran_rip_Response *resp);
 static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
                                cormoran_rip_Response *resp);
+static int handle_save_all_settings(const cormoran_rip_SaveAllSettingsRequest *req,
+                                    cormoran_rip_Response *resp);
+static int handle_discard_all_settings(const cormoran_rip_DiscardAllSettingsRequest *req,
+                                       cormoran_rip_Response *resp);
+static int handle_reset_all_settings(const cormoran_rip_ResetAllSettingsRequest *req,
+                                     cormoran_rip_Response *resp);
 
 /**
  * Main request handler for the custom RPC subsystem.
@@ -151,11 +172,21 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         break;
     case cormoran_rip_Request_set_xy_swap_enabled_tag:
         rc = handle_set_xy_swap_enabled(&req.request_type.set_xy_swap_enabled, resp);
+        break;
     case cormoran_rip_Request_set_x_invert_tag:
         rc = handle_set_x_invert(&req.request_type.set_x_invert, resp);
         break;
     case cormoran_rip_Request_set_y_invert_tag:
         rc = handle_set_y_invert(&req.request_type.set_y_invert, resp);
+        break;
+    case cormoran_rip_Request_save_all_settings_tag:
+        rc = handle_save_all_settings(&req.request_type.save_all_settings, resp);
+        break;
+    case cormoran_rip_Request_discard_all_settings_tag:
+        rc = handle_discard_all_settings(&req.request_type.discard_all_settings, resp);
+        break;
+    case cormoran_rip_Request_reset_all_settings_tag:
+        rc = handle_reset_all_settings(&req.request_type.reset_all_settings, resp);
         break;
     default:
         LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -171,39 +202,44 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
     return true;
 }
 
-// Helper callback to send notification for each processor during list operation
-struct list_processors_context {
-    int count;
-};
+/*
+ * List emits one state-changed notification per processor, but does so one
+ * processor per work item on ZMK's shared low-priority work queue,
+ * re-submitting itself for the next. This avoids monopolizing a work-queue
+ * thread when many processors are registered and paces the notifications
+ * through the Studio RPC TX path (which stalls on bursts of back-to-back
+ * notifications). The index is the processor id (its index in the registry);
+ * find_by_id returns NULL past the end, which ends the chain.
+ *
+ * NOTE: raising the state-changed event synchronously encodes a full
+ * InputProcessorInfo notification down through ZMK's Studio-RPC core, which
+ * needs more stack than the low-priority thread's 768 B default. This module
+ * therefore requires CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE to be raised
+ * (see the module's tests/zmk-config and README) - too small a stack faults
+ * with an MPU stack-guard (MemManage) exception the first time List runs.
+ */
+static size_t list_processors_next_index;
 
-static int list_processors_callback(const struct device *dev, void *user_data) {
-    struct list_processors_context *ctx = (struct list_processors_context *)user_data;
+static void list_input_processors_work_handler(struct k_work *work) {
+    const struct device *dev =
+        zmk_input_processor_runtime_find_by_id((uint8_t)list_processors_next_index);
+    if (!dev) {
+        LOG_INF("Finished listing %u input processors", (unsigned int)list_processors_next_index);
+        return;
+    }
 
     const char *name;
     struct zmk_input_processor_runtime_config config;
-    int ret = zmk_input_processor_runtime_get_config(dev, &name, &config);
-    if (ret < 0) {
-        return 0;
+    if (zmk_input_processor_runtime_get_config(dev, &name, &config) == 0) {
+        // Raise event which will be caught by listener and sent as notification
+        raise_zmk_input_processor_state_changed((struct zmk_input_processor_state_changed){
+            .id = (uint8_t)list_processors_next_index, .name = name, .config = config});
     }
 
-    // Get processor ID
-    int id = zmk_input_processor_runtime_get_id(dev);
-    if (id < 0) {
-        return 0;
-    }
-
-    // Raise event which will be caught by listener and sent as notification
-    raise_zmk_input_processor_state_changed((struct zmk_input_processor_state_changed){
-        .id = (uint8_t)id, .name = name, .config = config});
-
-    ctx->count++;
-    return 0;
-}
-
-static void list_input_processors_work_handler(struct k_work *work) {
-    struct list_processors_context ctx = {.count = 0};
-    zmk_input_processor_runtime_foreach(list_processors_callback, &ctx);
-    LOG_INF("Raised events for %d input processors", ctx.count);
+    // Yield the thread and continue with the next processor on a fresh work
+    // item rather than looping here.
+    list_processors_next_index++;
+    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), work);
 }
 
 K_WORK_DEFINE(list_input_processors_work, list_input_processors_work_handler);
@@ -213,7 +249,9 @@ K_WORK_DEFINE(list_input_processors_work, list_input_processors_work_handler);
  */
 static int handle_list_input_processors(const cormoran_rip_ListInputProcessorsRequest *req,
                                         cormoran_rip_Response *resp) {
-    k_work_submit(&list_input_processors_work);
+    // (Re)start the paced enumeration from the first processor.
+    list_processors_next_index = 0;
+    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &list_input_processors_work);
 
     // Return empty response (notifications sent via events contain the data)
     resp->which_response_type = cormoran_rip_Response_list_input_processors_tag;
@@ -245,6 +283,8 @@ static int handle_get_input_processor(const cormoran_rip_GetInputProcessorReques
         return ret;
     }
 
+    // nanopb skips the entire sub-message unless has_processor is set first.
+    result.has_processor = true;
     result.processor.id = req->id;
     strncpy(result.processor.name, name, sizeof(result.processor.name) - 1);
     result.processor.name[sizeof(result.processor.name) - 1] = '\0';
@@ -288,8 +328,9 @@ static int handle_set_scale_multiplier(const cormoran_rip_SetScaleMultiplierRequ
         return ret;
     }
 
-    // Set new multiplier (persistent)
-    ret = zmk_input_processor_runtime_set_scaling(dev, req->value, config.scale_divisor, true);
+    // Set new multiplier (write mode per request)
+    ret = zmk_input_processor_runtime_set_scaling(dev, req->value, config.scale_divisor,
+                                                  rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set scale multiplier: %d", ret);
         return ret;
@@ -323,8 +364,9 @@ static int handle_set_scale_divisor(const cormoran_rip_SetScaleDivisorRequest *r
         return ret;
     }
 
-    // Set new divisor (persistent)
-    ret = zmk_input_processor_runtime_set_scaling(dev, config.scale_multiplier, req->value, true);
+    // Set new divisor (write mode per request)
+    ret = zmk_input_processor_runtime_set_scaling(dev, config.scale_multiplier, req->value,
+                                                  rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set scale divisor: %d", ret);
         return ret;
@@ -351,8 +393,9 @@ static int handle_set_rotation(const cormoran_rip_SetRotationRequest *req,
         return -ENODEV;
     }
 
-    // Set rotation (persistent)
-    int ret = zmk_input_processor_runtime_set_rotation(dev, req->value, true);
+    // Set rotation (write mode per request)
+    int ret =
+        zmk_input_processor_runtime_set_rotation(dev, req->value, rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set rotation: %d", ret);
         return ret;
@@ -407,8 +450,9 @@ static int handle_set_temp_layer_enabled(const cormoran_rip_SetTempLayerEnabledR
         return -ENODEV;
     }
 
-    // Set temp-layer enabled (persistent)
-    int ret = zmk_input_processor_runtime_set_temp_layer_enabled(dev, req->enabled, true);
+    // Set temp-layer enabled (write mode per request)
+    int ret = zmk_input_processor_runtime_set_temp_layer_enabled(dev, req->enabled,
+                                                                 rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set temp-layer enabled: %d", ret);
         return ret;
@@ -435,8 +479,9 @@ static int handle_set_temp_layer_layer(const cormoran_rip_SetTempLayerLayerReque
         return -ENODEV;
     }
 
-    // Set temp-layer layer (persistent)
-    int ret = zmk_input_processor_runtime_set_temp_layer_layer(dev, req->layer, true);
+    // Set temp-layer layer (write mode per request)
+    int ret = zmk_input_processor_runtime_set_temp_layer_layer(dev, req->layer,
+                                                               rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set temp-layer layer: %d", ret);
         return ret;
@@ -465,9 +510,9 @@ handle_set_temp_layer_activation_delay(const cormoran_rip_SetTempLayerActivation
         return -ENODEV;
     }
 
-    // Set temp-layer activation delay (persistent)
+    // Set temp-layer activation delay (write mode per request)
     int ret = zmk_input_processor_runtime_set_temp_layer_activation_delay(
-        dev, req->activation_delay_ms, true);
+        dev, req->activation_delay_ms, rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set temp-layer activation delay: %d", ret);
         return ret;
@@ -496,9 +541,9 @@ static int handle_set_temp_layer_deactivation_delay(
         return -ENODEV;
     }
 
-    // Set temp-layer deactivation delay (persistent)
+    // Set temp-layer deactivation delay (write mode per request)
     int ret = zmk_input_processor_runtime_set_temp_layer_deactivation_delay(
-        dev, req->deactivation_delay_ms, true);
+        dev, req->deactivation_delay_ms, rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set temp-layer deactivation delay: %d", ret);
         return ret;
@@ -526,8 +571,9 @@ static int handle_set_active_layers(const cormoran_rip_SetActiveLayersRequest *r
         return -ENODEV;
     }
 
-    // Set active layers (persistent)
-    int ret = zmk_input_processor_runtime_set_active_layers(dev, req->layers, true);
+    // Set active layers (write mode per request)
+    int ret = zmk_input_processor_runtime_set_active_layers(dev, req->layers,
+                                                            rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set active layers: %d", ret);
         return ret;
@@ -554,8 +600,9 @@ static int handle_set_axis_snap_mode(const cormoran_rip_SetAxisSnapModeRequest *
         return -ENODEV;
     }
 
-    // Set axis snap mode (persistent)
-    int ret = zmk_input_processor_runtime_set_axis_snap_mode(dev, req->mode, true);
+    // Set axis snap mode (write mode per request)
+    int ret = zmk_input_processor_runtime_set_axis_snap_mode(dev, req->mode,
+                                                             rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set axis snap mode: %d", ret);
         return ret;
@@ -582,8 +629,9 @@ static int handle_set_axis_snap_threshold(const cormoran_rip_SetAxisSnapThreshol
         return -ENODEV;
     }
 
-    // Set axis snap threshold (persistent)
-    int ret = zmk_input_processor_runtime_set_axis_snap_threshold(dev, req->threshold, true);
+    // Set axis snap threshold (write mode per request)
+    int ret = zmk_input_processor_runtime_set_axis_snap_threshold(dev, req->threshold,
+                                                                  rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set axis snap threshold: %d", ret);
         return ret;
@@ -610,8 +658,9 @@ static int handle_set_axis_snap_timeout(const cormoran_rip_SetAxisSnapTimeoutReq
         return -ENODEV;
     }
 
-    // Set axis snap timeout (persistent)
-    int ret = zmk_input_processor_runtime_set_axis_snap_timeout(dev, req->timeout_ms, true);
+    // Set axis snap timeout (write mode per request)
+    int ret = zmk_input_processor_runtime_set_axis_snap_timeout(dev, req->timeout_ms,
+                                                                rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set axis snap timeout: %d", ret);
         return ret;
@@ -638,8 +687,9 @@ static int handle_set_x_invert(const cormoran_rip_SetXInvertRequest *req,
         return -ENODEV;
     }
 
-    // Set X invert (persistent)
-    int ret = zmk_input_processor_runtime_set_x_invert(dev, req->invert, true);
+    // Set X invert (write mode per request)
+    int ret =
+        zmk_input_processor_runtime_set_x_invert(dev, req->invert, rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set X invert: %d", ret);
         return ret;
@@ -666,8 +716,9 @@ static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
         return -ENODEV;
     }
 
-    // Set Y invert (persistent)
-    int ret = zmk_input_processor_runtime_set_y_invert(dev, req->invert, true);
+    // Set Y invert (write mode per request)
+    int ret =
+        zmk_input_processor_runtime_set_y_invert(dev, req->invert, rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set Y invert: %d", ret);
         return ret;
@@ -750,8 +801,9 @@ static int handle_set_xy_to_scroll_enabled(const cormoran_rip_SetXyToScrollEnabl
         return -ENODEV;
     }
 
-    // Set XY-to-scroll enabled (persistent)
-    int ret = zmk_input_processor_runtime_set_xy_to_scroll_enabled(dev, req->enabled, true);
+    // Set XY-to-scroll enabled (write mode per request)
+    int ret = zmk_input_processor_runtime_set_xy_to_scroll_enabled(dev, req->enabled,
+                                                                   rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set XY-to-scroll enabled: %d", ret);
         return ret;
@@ -778,8 +830,9 @@ static int handle_set_xy_swap_enabled(const cormoran_rip_SetXySwapEnabledRequest
         return -ENODEV;
     }
 
-    // Set XY-swap enabled (persistent)
-    int ret = zmk_input_processor_runtime_set_xy_swap_enabled(dev, req->enabled, true);
+    // Set XY-swap enabled (write mode per request)
+    int ret = zmk_input_processor_runtime_set_xy_swap_enabled(dev, req->enabled,
+                                                              rip_write_mode(req->write_mode));
     if (ret < 0) {
         LOG_ERR("Failed to set XY-swap enabled: %d", ret);
         return ret;
@@ -790,6 +843,57 @@ static int handle_set_xy_swap_enabled(const cormoran_rip_SetXySwapEnabledRequest
     resp->response_type.set_xy_swap_enabled =
         (cormoran_rip_SetXySwapEnabledResponse)cormoran_rip_SetXySwapEnabledResponse_init_zero;
 
+    return 0;
+}
+
+/**
+ * Persist every processor's current in-memory settings to flash.
+ */
+static int handle_save_all_settings(const cormoran_rip_SaveAllSettingsRequest *req,
+                                    cormoran_rip_Response *resp) {
+    int ret = zmk_input_processor_runtime_save_all();
+    if (ret < 0) {
+        LOG_ERR("Failed to save all settings: %d", ret);
+        return ret;
+    }
+
+    resp->which_response_type = cormoran_rip_Response_save_all_settings_tag;
+    resp->response_type.save_all_settings =
+        (cormoran_rip_SaveAllSettingsResponse)cormoran_rip_SaveAllSettingsResponse_init_zero;
+    return 0;
+}
+
+/**
+ * Drop every processor's unsaved (memory) changes, reloading the saved values.
+ */
+static int handle_discard_all_settings(const cormoran_rip_DiscardAllSettingsRequest *req,
+                                       cormoran_rip_Response *resp) {
+    int ret = zmk_input_processor_runtime_discard_all();
+    if (ret < 0) {
+        LOG_ERR("Failed to discard all settings: %d", ret);
+        return ret;
+    }
+
+    resp->which_response_type = cormoran_rip_Response_discard_all_settings_tag;
+    resp->response_type.discard_all_settings =
+        (cormoran_rip_DiscardAllSettingsResponse)cormoran_rip_DiscardAllSettingsResponse_init_zero;
+    return 0;
+}
+
+/**
+ * Reset every processor to its devicetree defaults and persist them.
+ */
+static int handle_reset_all_settings(const cormoran_rip_ResetAllSettingsRequest *req,
+                                     cormoran_rip_Response *resp) {
+    int ret = zmk_input_processor_runtime_reset_all();
+    if (ret < 0) {
+        LOG_ERR("Failed to reset all settings: %d", ret);
+        return ret;
+    }
+
+    resp->which_response_type = cormoran_rip_Response_reset_all_settings_tag;
+    resp->response_type.reset_all_settings =
+        (cormoran_rip_ResetAllSettingsResponse)cormoran_rip_ResetAllSettingsResponse_init_zero;
     return 0;
 }
 

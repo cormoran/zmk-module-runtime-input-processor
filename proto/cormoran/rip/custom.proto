@@ -9,6 +9,15 @@ enum AxisSnapMode {
     AXIS_SNAP_MODE_Y = 2;    // Snap to Y axis
 }
 
+// Where a Set* request stores the new value. Mirrors zmk-feature-custom-settings'
+// write modes. PERSIST is value 0 so that a request that omits the field (older
+// clients, proto3 default) keeps the previous always-persist behavior.
+enum WriteMode {
+    WRITE_MODE_PERSIST = 0;   // Update the saved value and write it to flash (default)
+    WRITE_MODE_MEMORY = 1;    // Update the saved value in RAM only (lost on reboot)
+    WRITE_MODE_TEMPORARY = 2; // Apply to the live value only (not part of the saved value)
+}
+
 // Runtime Input Processor Messages
 message InputProcessorInfo {
     uint32 id = 1;               // Processor ID (index in array)
@@ -63,18 +72,21 @@ message GetLayerInfoResponse {
 }
 
 message SetScaleMultiplierRequest {
-    uint32 id = 1;    // ID of the input processor to update
-    uint32 value = 2; // New scaling multiplier
+    uint32 id = 1;             // ID of the input processor to update
+    uint32 value = 2;         // New scaling multiplier
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetScaleDivisorRequest {
-    uint32 id = 1;    // ID of the input processor to update
-    uint32 value = 2; // New scaling divisor
+    uint32 id = 1;            // ID of the input processor to update
+    uint32 value = 2;         // New scaling divisor
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetRotationRequest {
-    uint32 id = 1;   // ID of the input processor to update
-    int32 value = 2; // New rotation angle in degrees
+    uint32 id = 1;            // ID of the input processor to update
+    int32 value = 2;          // New rotation angle in degrees
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message ResetInputProcessorRequest {
@@ -82,53 +94,63 @@ message ResetInputProcessorRequest {
 }
 
 message SetTempLayerEnabledRequest {
-    uint32 id = 1;    // ID of the input processor to update
-    bool enabled = 2; // Whether temp-layer is enabled
+    uint32 id = 1;            // ID of the input processor to update
+    bool enabled = 2;         // Whether temp-layer is enabled
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetTempLayerLayerRequest {
-    uint32 id = 1;    // ID of the input processor to update
-    uint32 layer = 2; // Target layer ID for temp-layer
+    uint32 id = 1;            // ID of the input processor to update
+    uint32 layer = 2;         // Target layer ID for temp-layer
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetTempLayerActivationDelayRequest {
     uint32 id = 1;                  // ID of the input processor to update
     uint32 activation_delay_ms = 2; // Delay before activating (ms)
+    WriteMode write_mode = 3;       // Where to store the value (default: persist)
 }
 
 message SetTempLayerDeactivationDelayRequest {
     uint32 id = 1;                    // ID of the input processor to update
     uint32 deactivation_delay_ms = 2; // Delay before deactivating (ms)
+    WriteMode write_mode = 3;         // Where to store the value (default: persist)
 }
 
 message SetActiveLayersRequest {
-    uint32 id = 1;     // ID of the input processor to update
-    uint32 layers = 2; // Bitmask of layers where processor is active (0 = all)
+    uint32 id = 1;            // ID of the input processor to update
+    uint32 layers = 2;        // Bitmask of layers where processor is active (0 = all)
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetAxisSnapModeRequest {
-    uint32 id = 1;         // ID of the input processor to update
-    AxisSnapMode mode = 2; // Snap mode
+    uint32 id = 1;            // ID of the input processor to update
+    AxisSnapMode mode = 2;    // Snap mode
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetAxisSnapThresholdRequest {
-    uint32 id = 1;        // ID of the input processor to update
-    uint32 threshold = 2; // Threshold for unsnapping
+    uint32 id = 1;            // ID of the input processor to update
+    uint32 threshold = 2;     // Threshold for unsnapping
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetAxisSnapTimeoutRequest {
-    uint32 id = 1;         // ID of the input processor to update
-    uint32 timeout_ms = 2; // Time window for threshold check (ms)
+    uint32 id = 1;            // ID of the input processor to update
+    uint32 timeout_ms = 2;    // Time window for threshold check (ms)
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetXyToScrollEnabledRequest {
-    uint32 id = 1;    // ID of the input processor to update
-    bool enabled = 2; // Whether XY-to-scroll mapping is enabled
+    uint32 id = 1;            // ID of the input processor to update
+    bool enabled = 2;         // Whether XY-to-scroll mapping is enabled
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetXySwapEnabledRequest {
-    uint32 id = 1;    // ID of the input processor to update
-    bool enabled = 2; // Whether XY-swap is enabled
+    uint32 id = 1;            // ID of the input processor to update
+    bool enabled = 2;         // Whether XY-swap is enabled
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetScaleMultiplierResponse {
@@ -188,8 +210,9 @@ message SetXySwapEnabledResponse {
 }
 
 message SetXInvertRequest {
-    uint32 id = 1;   // ID of the input processor to update
-    bool invert = 2; // Whether to invert X axis
+    uint32 id = 1;            // ID of the input processor to update
+    bool invert = 2;          // Whether to invert X axis
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetXInvertResponse {
@@ -197,11 +220,42 @@ message SetXInvertResponse {
 }
 
 message SetYInvertRequest {
-    uint32 id = 1;   // ID of the input processor to update
-    bool invert = 2; // Whether to invert Y axis
+    uint32 id = 1;            // ID of the input processor to update
+    bool invert = 2;          // Whether to invert Y axis
+    WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
 
 message SetYInvertResponse {
+    // Empty - use notification to report changes
+}
+
+// Persist every processor's current in-memory settings to flash. Flushes values
+// that were set with WRITE_MODE_MEMORY.
+message SaveAllSettingsRequest {
+    // Empty
+}
+
+message SaveAllSettingsResponse {
+    // Empty - use notification to report changes
+}
+
+// Drop every processor's unsaved (memory) changes and reload the last-saved
+// values from flash. Processors that have nothing saved revert to their
+// devicetree defaults.
+message DiscardAllSettingsRequest {
+    // Empty
+}
+
+message DiscardAllSettingsResponse {
+    // Empty - use notification to report changes
+}
+
+// Reset every processor to its devicetree defaults and persist those defaults.
+message ResetAllSettingsRequest {
+    // Empty
+}
+
+message ResetAllSettingsResponse {
     // Empty - use notification to report changes
 }
 
@@ -226,6 +280,9 @@ message Request {
         SetXySwapEnabledRequest set_xy_swap_enabled = 17;
         SetXInvertRequest set_x_invert = 18;
         SetYInvertRequest set_y_invert = 19;
+        SaveAllSettingsRequest save_all_settings = 20;
+        DiscardAllSettingsRequest discard_all_settings = 21;
+        ResetAllSettingsRequest reset_all_settings = 22;
     }
 }
 
@@ -253,6 +310,9 @@ message Response {
         SetXySwapEnabledResponse set_xy_swap_enabled = 18;
         SetXInvertResponse set_x_invert = 19;
         SetYInvertResponse set_y_invert = 20;
+        SaveAllSettingsResponse save_all_settings = 21;
+        DiscardAllSettingsResponse discard_all_settings = 22;
+        ResetAllSettingsResponse reset_all_settings = 23;
     }
 }
 

@@ -91,22 +91,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# renode_harness comes from the zmk-workspace checkout the action provides
-# on PYTHONPATH. Support running this file directly too by falling back to
-# conventional relative locations: first the zmk-workspace west dependency
-# this repo has (west/west-dependency/west-test-dependency.yml -- nicer than
-# requiring a sibling checkout, since `west update` already fetches it),
-# then a sibling `zmk-workspace` checkout next to this repo.
+# renode_harness comes from the zmk-workspace checkout the zmk-renode-test
+# action provides on PYTHONPATH (zmk-workspace is no longer a west dependency
+# -- the buildable renode module/snippet now come from zmk-west-commands).
+# Support running this file directly too by falling back to a sibling
+# `zmk-workspace` checkout next to this repo.
 try:
     import renode_harness
 except ImportError:  # pragma: no cover - convenience fallback for local dev
     fallback_candidates = [
-        REPO_ROOT
-        / "dependencies"
-        / "zmk-workspace"
-        / "skills"
-        / "test-zmk-renode"
-        / "scripts",
         REPO_ROOT.parent / "zmk-workspace" / "skills" / "test-zmk-renode" / "scripts",
     ]
     for fallback in fallback_candidates:

@@ -35,6 +35,10 @@ manifest:
       revision: v0.3+custom-studio-protocol
       import:
         file: app/west.yml
+    # Persistent settings storage backend used by this module
+    - name: zmk-feature-custom-settings
+      remote: cormoran
+      revision: main
 ```
 
 ### 2. Enable the feature in your `config/<shield>.conf`
@@ -48,7 +52,25 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR=y
 # Enable studio custom RPC features for web UI
 CONFIG_ZMK_STUDIO=y
 CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
+
+# Required when the Studio RPC is enabled: "Refresh List" paces its
+# per-processor notifications on ZMK's shared low-priority work queue, and
+# encoding a notification through the Studio RPC core needs more than that
+# thread's 768-byte default stack. A build without this raise will fault
+# (MPU stack guard) the first time the web UI lists processors.
+CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE=2048
 ```
+
+> A module cannot raise this shared thread's stack for you (a ZMK Kconfig
+> `default` in your config wins over the module's), so it must live in your
+> keyboard config as shown above.
+
+`CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR` automatically selects `CONFIG_ZMK_CUSTOM_SETTINGS`
+(from [zmk-feature-custom-settings](https://github.com/cormoran/zmk-feature-custom-settings)),
+which this module uses purely as a typed persistence backend for the settings described
+below - `zmk-feature-custom-settings`'s own Studio RPC surface is not required and is not
+enabled by this module (the RPC/web UI in this repo is unaffected and unofficial-Studio-RPC
+compatible as before).
 
 ### 3. Add runtime input processor to your keymap
 
@@ -132,6 +154,33 @@ CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC=y
 3. The web interface will automatically detect available input processors
 4. Adjust scaling and rotation parameters
 5. Changes are applied immediately without restarting
+
+### Storage modes (memory vs. persistent)
+
+Each setting write chooses where the value is stored, mirroring
+`zmk-feature-custom-settings`:
+
+- **Persist to flash** (default): the value is applied and saved to
+  non-volatile storage, so it survives a reboot. This is the historical
+  behavior — clients that do not select a mode always persist.
+- **Memory only**: the value is applied and kept as the current baseline in
+  RAM, but is _not_ written to flash. It is lost on reboot unless you save it.
+
+The web UI exposes this as the **Storage** selector next to "Apply Settings".
+Three whole-keyboard operations sit next to "Refresh List":
+
+- **Save All** — flush every processor's current settings to flash (persist any
+  "memory only" changes).
+- **Discard All** — drop unsaved (memory-only) changes and reload the last saved
+  values from flash; processors with nothing saved return to their devicetree
+  defaults.
+- **Reset All** — reset every processor to its devicetree defaults and persist
+  them.
+
+The equivalent firmware API is
+`zmk_input_processor_runtime_save_all()` / `_discard_all()` / `_reset_all()`,
+and the setters take a `zmk_input_processor_runtime_write_mode`
+(`PERSIST` / `MEMORY` / `TEMPORARY`).
 
 ### Configuration Parameters
 

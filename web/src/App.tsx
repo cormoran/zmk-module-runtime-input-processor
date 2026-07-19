@@ -22,6 +22,7 @@ import {
   InputProcessorInfo,
   Notification,
   AxisSnapMode,
+  WriteMode,
 } from "./proto/cormoran/rip/custom";
 
 // Custom subsystem identifier - must match firmware registration
@@ -192,6 +193,13 @@ export function InputProcessorManager() {
   const [xInvert, setXInvert] = useState<boolean>(false);
   const [yInvert, setYInvert] = useState<boolean>(false);
 
+  // Where "Apply Settings" stores values: persist to flash (default) or keep
+  // in memory only (lost on reboot until saved). Mirrors the custom-settings
+  // write modes.
+  const [writeMode, setWriteMode] = useState<WriteMode>(
+    WriteMode.WRITE_MODE_PERSIST
+  );
+
   const { ready, subsystem, call } = useCustomSubsystem(SUBSYSTEM_IDENTIFIER, {
     encode: (r: Request) => Request.encode(r).finish(),
     decode: Response.decode,
@@ -296,6 +304,7 @@ export function InputProcessorManager() {
         const mulRequest = Request.create({
           setScaleMultiplier: {
             id: selectedProcessorId,
+            writeMode,
             value: scaleMultiplier,
           },
         });
@@ -311,6 +320,7 @@ export function InputProcessorManager() {
         const divRequest = Request.create({
           setScaleDivisor: {
             id: selectedProcessorId,
+            writeMode,
             value: scaleDivisor,
           },
         });
@@ -326,6 +336,7 @@ export function InputProcessorManager() {
         const rotRequest = Request.create({
           setRotation: {
             id: selectedProcessorId,
+            writeMode,
             value: rotationDegrees,
           },
         });
@@ -341,6 +352,7 @@ export function InputProcessorManager() {
         const enabledRequest = Request.create({
           setTempLayerEnabled: {
             id: selectedProcessorId,
+            writeMode,
             enabled: tempLayerEnabled,
           },
         });
@@ -356,6 +368,7 @@ export function InputProcessorManager() {
         const layerRequest = Request.create({
           setTempLayerLayer: {
             id: selectedProcessorId,
+            writeMode,
             layer: tempLayerLayer,
           },
         });
@@ -373,6 +386,7 @@ export function InputProcessorManager() {
         const actDelayRequest = Request.create({
           setTempLayerActivationDelay: {
             id: selectedProcessorId,
+            writeMode,
             activationDelayMs: tempLayerActivationDelay,
           },
         });
@@ -391,6 +405,7 @@ export function InputProcessorManager() {
         const deactDelayRequest = Request.create({
           setTempLayerDeactivationDelay: {
             id: selectedProcessorId,
+            writeMode,
             deactivationDelayMs: tempLayerDeactivationDelay,
           },
         });
@@ -406,6 +421,7 @@ export function InputProcessorManager() {
         const activeLayersRequest = Request.create({
           setActiveLayers: {
             id: selectedProcessorId,
+            writeMode,
             layers: activeLayers,
           },
         });
@@ -421,6 +437,7 @@ export function InputProcessorManager() {
         const axisSnapModeRequest = Request.create({
           setAxisSnapMode: {
             id: selectedProcessorId,
+            writeMode,
             mode: axisSnapMode,
           },
         });
@@ -436,6 +453,7 @@ export function InputProcessorManager() {
         const axisSnapThresholdRequest = Request.create({
           setAxisSnapThreshold: {
             id: selectedProcessorId,
+            writeMode,
             threshold: axisSnapThreshold,
           },
         });
@@ -451,6 +469,7 @@ export function InputProcessorManager() {
         const axisSnapTimeoutRequest = Request.create({
           setAxisSnapTimeout: {
             id: selectedProcessorId,
+            writeMode,
             timeoutMs: axisSnapTimeout,
           },
         });
@@ -466,6 +485,7 @@ export function InputProcessorManager() {
         const xyToScrollRequest = Request.create({
           setXyToScrollEnabled: {
             id: selectedProcessorId,
+            writeMode,
             enabled: xyToScrollEnabled,
           },
         });
@@ -481,6 +501,7 @@ export function InputProcessorManager() {
         const xInvertRequest = Request.create({
           setXInvert: {
             id: selectedProcessorId,
+            writeMode,
             invert: xInvert,
           },
         });
@@ -496,6 +517,7 @@ export function InputProcessorManager() {
         const xySwapRequest = Request.create({
           setXySwapEnabled: {
             id: selectedProcessorId,
+            writeMode,
             enabled: xySwapEnabled,
           },
         });
@@ -511,6 +533,7 @@ export function InputProcessorManager() {
         const yInvertRequest = Request.create({
           setYInvert: {
             id: selectedProcessorId,
+            writeMode,
             invert: yInvert,
           },
         });
@@ -557,7 +580,46 @@ export function InputProcessorManager() {
     xySwapEnabled,
     xInvert,
     yInvert,
+    writeMode,
   ]);
+
+  // Save all / discard all / reset all - mirror the custom-settings operations
+  // across every processor. After each, reload so the form reflects the result.
+  const runAllSettingsOp = useCallback(
+    async (request: Request, label: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const resp = await callRPC(request);
+        if (resp?.error) {
+          setError(resp.error.message);
+          return;
+        }
+        await loadProcessors();
+      } catch (err) {
+        setError(
+          `Failed to ${label}: ${err instanceof Error ? err.message : "Unknown error"}`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [callRPC, loadProcessors]
+  );
+
+  const saveAllSettings = useCallback(
+    () => runAllSettingsOp(Request.create({ saveAllSettings: {} }), "save"),
+    [runAllSettingsOp]
+  );
+  const discardAllSettings = useCallback(
+    () =>
+      runAllSettingsOp(Request.create({ discardAllSettings: {} }), "discard"),
+    [runAllSettingsOp]
+  );
+  const resetAllSettings = useCallback(
+    () => runAllSettingsOp(Request.create({ resetAllSettings: {} }), "reset"),
+    [runAllSettingsOp]
+  );
 
   const selectProcessor = useCallback(
     (id: number) => {
@@ -732,13 +794,44 @@ export function InputProcessorManager() {
           </div>
         )}
 
-        <div style={{ marginBottom: "1rem" }}>
+        <div
+          style={{
+            marginBottom: "1rem",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.5rem",
+          }}
+        >
           <button
             className="btn btn-primary"
             onClick={loadProcessors}
             disabled={isLoading || locked}
           >
             {isLoading ? "⏳ Loading..." : "🔄 Refresh List"}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={saveAllSettings}
+            disabled={isLoading || locked}
+            title="Persist every processor's current settings to flash"
+          >
+            💾 Save All
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={discardAllSettings}
+            disabled={isLoading || locked}
+            title="Drop unsaved changes and reload the saved values"
+          >
+            ↩️ Discard All
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={resetAllSettings}
+            disabled={isLoading || locked}
+            title="Reset every processor to its devicetree defaults"
+          >
+            🗑️ Reset All
           </button>
         </div>
 
@@ -1228,6 +1321,34 @@ export function InputProcessorManager() {
               }}
             >
               Reverse vertical input direction
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: "1rem" }}>
+            <label htmlFor="write-mode-select">Storage</label>
+            <select
+              id="write-mode-select"
+              value={writeMode}
+              onChange={(e) =>
+                setWriteMode(Number(e.target.value) as WriteMode)
+              }
+            >
+              <option value={WriteMode.WRITE_MODE_PERSIST}>
+                Persist to flash (survives reboot)
+              </option>
+              <option value={WriteMode.WRITE_MODE_MEMORY}>
+                Memory only (until saved / reboot)
+              </option>
+            </select>
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              "Memory only" changes stay until you press "Save All" or the
+              keyboard reboots. Use "Discard All" to drop unsaved changes.
             </div>
           </div>
 

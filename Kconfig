@@ -1,5 +1,6 @@
 config ZMK_RUNTIME_INPUT_PROCESSOR
     bool "Enable runtime input processor feature"
+    select ZMK_CUSTOM_SETTINGS
 
 if ZMK_RUNTIME_INPUT_PROCESSOR
 
@@ -10,5 +11,12 @@ config ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC
 config ZMK_RUNTIME_INPUT_PROCESSOR_NAME_MAX_LEN
     int "Maximum length of runtime input processor names"
     default 8
+
+config ZMK_RUNTIME_INPUT_PROCESSOR_TEST
+    bool "Enable test-only hooks for the persisted-settings boot-apply path"
+    help
+      Compiles in zmk_input_processor_runtime_test_apply_persisted_settings(),
+      which lets a test synchronously re-run the settings boot-apply logic
+      instead of waiting on the real SYS_INIT delay. Not for production use.
 
 endif

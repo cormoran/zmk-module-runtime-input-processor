@@ -55,9 +55,9 @@ static int on_keymap_binding_pressed(struct zmk_behavior_binding *binding,
     // Apply temporary configuration (non-persistent)
     int ret = 0;
     if (cfg->scale_multiplier > 0 && cfg->scale_divisor > 0) {
-        ret = zmk_input_processor_runtime_set_scaling(data->processor, cfg->scale_multiplier,
-                                                      cfg->scale_divisor,
-                                                      false); // temporary
+        ret = zmk_input_processor_runtime_set_scaling(
+            data->processor, cfg->scale_multiplier, cfg->scale_divisor,
+            ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY);
         if (ret < 0) {
             LOG_ERR("Failed to set temporary scaling: %d", ret);
             return ret;
@@ -66,8 +66,9 @@ static int on_keymap_binding_pressed(struct zmk_behavior_binding *binding,
 
     // Update rotation if provided and valid (non-persistent)
     if (cfg->rotation_degrees >= -360 && cfg->rotation_degrees <= 360) {
-        ret = zmk_input_processor_runtime_set_rotation(data->processor, cfg->rotation_degrees,
-                                                       false); // temporary
+        ret = zmk_input_processor_runtime_set_rotation(
+            data->processor, cfg->rotation_degrees,
+            ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY);
         if (ret < 0) {
             LOG_ERR("Failed to set temporary rotation: %d", ret);
             return ret;

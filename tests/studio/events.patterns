@@ -1,1 +1,3 @@
 s/.*custom_subsystem_init:.*Identifier: //p
+s/.*PASS: rip_settings_persist_reload/PASS: rip_settings_persist_reload/p
+s/.*PASS: rip_settings_write_modes/PASS: rip_settings_write_modes/p
