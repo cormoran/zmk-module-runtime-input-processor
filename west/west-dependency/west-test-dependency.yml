@@ -12,17 +12,15 @@ manifest:
       import:
         file: app/west.yml
       clone-depth: 1
+    # Also provides the Renode-only Studio RPC UART transport + the
+    # renode-studio-uart snippet as a Kconfig-gated Zephyr module (see its
+    # root zephyr/module.yml), used by tests/zmk-config/build.yaml's
+    # renode_smoke_test artifact. Do NOT additionally pull the same module
+    # from cormoran/zmk-workspace's skills/test-zmk-renode -- both define the
+    # renode_uart transport and would collide at link time (multiple
+    # definition of `renode_uart`). The runtime Renode harness/scripts come
+    # from the zmk-renode-test GitHub Action's own checkout, not a west dep.
     - name: zmk-west-commands
       remote: cormoran
       revision: main
       import: true
-    # Provides the Renode-only Studio RPC UART transport + the
-    # renode-studio-uart snippet (as a Zephyr module -- see its own
-    # zephyr/module.yml) used by tests/zmk-config/build.yaml's
-    # renode_smoke_test artifact and the zmk-renode-test GitHub Action.
-    # Test-only: do not add this to west-dependency.yml (that one is
-    # imported by consumers of this module).
-    - name: zmk-workspace
-      remote: cormoran
-      revision: main
-      clone-depth: 1

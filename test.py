@@ -58,8 +58,8 @@ class WestCommandsTests(unittest.TestCase):
             ],
             # Hardware-free Renode testing artifact (see README.md's
             # "Hardware-free Renode testing" section): built with the
-            # renode-studio-uart snippet from cormoran/zmk-workspace (a
-            # test-only west dependency) instead of the real USB-carried
+            # renode-studio-uart snippet from cormoran/zmk-west-commands (a
+            # test west dependency) instead of the real USB-carried
             # studio-rpc-usb-uart snippet. Verify the snippet's Kconfig
             # actually took effect -- the Renode-only transport enabled, the
             # real USB-gated one and USB itself disabled.

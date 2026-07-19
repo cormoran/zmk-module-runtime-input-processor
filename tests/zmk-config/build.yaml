@@ -11,7 +11,7 @@ include:
 
   # Hardware-free Renode testing (see README.md's "Hardware-free Renode
   # testing" section). Uses the renode-studio-uart snippet from
-  # cormoran/zmk-workspace (a test-only west dependency, see
+  # cormoran/zmk-west-commands (already a test west dependency, see
   # west/west-dependency/west-test-dependency.yml) in place of the real
   # USB-carried studio-rpc-usb-uart snippet -- Renode's nRF52840 USBD model
   # can't present a host-openable CDC port, so this binds Studio RPC (and
