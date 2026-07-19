@@ -492,9 +492,11 @@ static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
  * subsystem id "cormoran_rip" (see src/studio/custom_handler.c) rather than a
  * separate namespace, so these entries appear in the generic list.
  *
- * Confidentiality stays DEVICE_PRIVATE: that only suppresses the *value* over
- * the generic RPC (not the list entry itself), so the key/meta are visible for
- * inspection while this module's own RPC handlers remain the only editor.
+ * Confidentiality is RPC_PUBLIC: the value (the packed blob) is exposed over the
+ * generic custom-settings RPC's list/get alongside the key/meta. This module's
+ * own Studio RPC remains the intended editing surface (there is deliberately no
+ * zmk_custom_setting_changed listener re-applying generic writes to the device -
+ * see the load path below), so the generic surface is for visibility/inspection.
  */
 #define RIP_SETTINGS_SUBSYSTEM_ID "cormoran_rip"
 #define RIP_SETTINGS_BLOB_VERSION 1
@@ -1063,7 +1065,7 @@ DT_INST_FOREACH_STATUS_OKAY(RUNTIME_PROCESSOR_INST)
     ZMK_CUSTOM_SETTING_DEFINE(                                                                     \
         runtime_processor_setting_##n, RIP_SETTINGS_SUBSYSTEM_ID,                                  \
         DT_INST_PROP(n, processor_label), ZMK_CUSTOM_SETTING_VALUE_TYPE_BYTES,                     \
-        RIP_SETTINGS_EMPTY_BYTES_DEFAULT, ZMK_CUSTOM_SETTING_CONFIDENTIALITY_DEVICE_PRIVATE,       \
+        RIP_SETTINGS_EMPTY_BYTES_DEFAULT, ZMK_CUSTOM_SETTING_CONFIDENTIALITY_RPC_PUBLIC,           \
         ZMK_CUSTOM_SETTING_PERMISSION_UNSECURE, ZMK_CUSTOM_SETTING_PERMISSION_UNSECURE,            \
         ZMK_CUSTOM_SETTING_NO_CONSTRAINT);
 
