@@ -192,6 +192,12 @@ export function InputProcessorManager() {
   // Axis invert state
   const [xInvert, setXInvert] = useState<boolean>(false);
   const [yInvert, setYInvert] = useState<boolean>(false);
+  // Raw input filter state
+  const [smallInputFilterEnabled, setSmallInputFilterEnabled] =
+    useState<boolean>(false);
+  const [smallInputThreshold, setSmallInputThreshold] = useState<number>(0);
+  const [smallInputAllowAfterLarge, setSmallInputAllowAfterLarge] =
+    useState<boolean>(false);
 
   // Where "Apply Settings" stores values: persist to flash (default) or keep
   // in memory only (lost on reboot until saved). Mirrors the custom-settings
@@ -545,6 +551,28 @@ export function InputProcessorManager() {
         }
       }
 
+      if (
+        currentProcessor.smallInputFilterEnabled !== smallInputFilterEnabled ||
+        currentProcessor.smallInputThreshold !== smallInputThreshold ||
+        currentProcessor.smallInputAllowAfterLarge !== smallInputAllowAfterLarge
+      ) {
+        const smallInputFilterRequest = Request.create({
+          setSmallInputFilter: {
+            id: selectedProcessorId,
+            writeMode,
+            enabled: smallInputFilterEnabled,
+            threshold: smallInputThreshold,
+            allowAfterLarge: smallInputAllowAfterLarge,
+          },
+        });
+        const smallInputFilterResp = await callRPC(smallInputFilterRequest);
+        if (smallInputFilterResp?.error) {
+          setError(smallInputFilterResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // Updates will come via notifications
     } catch (err) {
       if (isUnlockRequiredError(err)) {
@@ -580,6 +608,9 @@ export function InputProcessorManager() {
     xySwapEnabled,
     xInvert,
     yInvert,
+    smallInputFilterEnabled,
+    smallInputThreshold,
+    smallInputAllowAfterLarge,
     writeMode,
   ]);
 
@@ -641,6 +672,9 @@ export function InputProcessorManager() {
         setXySwapEnabled(proc.xySwapEnabled);
         setXInvert(proc.xInvert);
         setYInvert(proc.yInvert);
+        setSmallInputFilterEnabled(proc.smallInputFilterEnabled);
+        setSmallInputThreshold(proc.smallInputThreshold);
+        setSmallInputAllowAfterLarge(proc.smallInputAllowAfterLarge);
       }
     },
     [processors]
@@ -712,6 +746,9 @@ export function InputProcessorManager() {
               setXySwapEnabled(proc.xySwapEnabled);
               setXInvert(proc.xInvert);
               setYInvert(proc.yInvert);
+              setSmallInputFilterEnabled(proc.smallInputFilterEnabled);
+              setSmallInputThreshold(proc.smallInputThreshold);
+              setSmallInputAllowAfterLarge(proc.smallInputAllowAfterLarge);
             }
 
             // If no processor is selected yet, select the first one
@@ -732,6 +769,9 @@ export function InputProcessorManager() {
               setXySwapEnabled(proc.xySwapEnabled);
               setXInvert(proc.xInvert);
               setYInvert(proc.yInvert);
+              setSmallInputFilterEnabled(proc.smallInputFilterEnabled);
+              setSmallInputThreshold(proc.smallInputThreshold);
+              setSmallInputAllowAfterLarge(proc.smallInputAllowAfterLarge);
             }
           }
         } catch (err) {
@@ -1130,6 +1170,86 @@ export function InputProcessorManager() {
               )}
             </div>
           </div>
+
+          <hr style={{ margin: "1.5rem 0", border: "1px solid #e0e0e0" }} />
+
+          <h3>Small Input Filter</h3>
+          <p style={{ fontSize: "0.9em", color: "#666", marginBottom: "1rem" }}>
+            Suppress tiny raw X/Y inputs before scaling, rotation, inversion,
+            snapping, or code mapping.
+          </p>
+
+          <div className="input-group">
+            <label htmlFor="small-input-filter-enabled">
+              <input
+                id="small-input-filter-enabled"
+                type="checkbox"
+                checked={smallInputFilterEnabled}
+                onChange={(e) => setSmallInputFilterEnabled(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Ignore Small Inputs
+            </label>
+          </div>
+
+          {smallInputFilterEnabled && (
+            <>
+              <div className="input-group">
+                <label htmlFor="small-input-threshold">Threshold:</label>
+                <input
+                  id="small-input-threshold"
+                  type="number"
+                  min="0"
+                  max="65535"
+                  value={smallInputThreshold}
+                  onChange={(e) =>
+                    setSmallInputThreshold(
+                      Math.min(
+                        65535,
+                        Math.max(0, parseInt(e.target.value) || 0)
+                      )
+                    )
+                  }
+                />
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Raw X/Y values whose absolute value is at or below this
+                  threshold are ignored.
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="small-input-allow-after-large">
+                  <input
+                    id="small-input-allow-after-large"
+                    type="checkbox"
+                    checked={smallInputAllowAfterLarge}
+                    onChange={(e) =>
+                      setSmallInputAllowAfterLarge(e.target.checked)
+                    }
+                    style={{ marginRight: "0.5rem" }}
+                  />
+                  Allow the next small input after a large input
+                </label>
+                <div
+                  style={{
+                    fontSize: "0.85em",
+                    color: "#666",
+                    marginTop: "0.25rem",
+                    marginLeft: "1.7rem",
+                  }}
+                >
+                  Checked independently for X and Y. A threshold-exceeding raw
+                  input allows the following small input on that same axis.
+                </div>
+              </div>
+            </>
+          )}
 
           <hr style={{ margin: "1.5rem 0", border: "1px solid #e0e0e0" }} />
 

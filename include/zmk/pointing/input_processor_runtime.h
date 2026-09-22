@@ -55,6 +55,10 @@ struct zmk_input_processor_runtime_config {
     // Axis reverse settings
     bool x_invert; // Whether to invert X axis
     bool y_invert; // Whether to invert Y axis
+    // Raw input filter settings, applied before other transformations
+    bool small_input_filter_enabled;
+    uint16_t small_input_threshold;
+    bool small_input_allow_after_large;
 };
 
 /**
@@ -348,6 +352,17 @@ int zmk_input_processor_runtime_set_x_invert(const struct device *dev, bool inve
  */
 int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool invert,
                                              enum zmk_input_processor_runtime_write_mode mode);
+
+/**
+ * @brief Set the raw small-input filter configuration
+ *
+ * Values whose absolute raw input is at or below threshold are suppressed.
+ * When allow_after_large is true, the first small input on an axis following a
+ * threshold-exceeding input on that same axis is allowed through.
+ */
+int zmk_input_processor_runtime_set_small_input_filter(
+    const struct device *dev, bool enabled, uint16_t threshold, bool allow_after_large,
+    enum zmk_input_processor_runtime_write_mode mode);
 
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_TEST)
 /**

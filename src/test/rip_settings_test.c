@@ -36,12 +36,14 @@
 #include <string.h>
 
 #include <zephyr/init.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/util.h>
 
 #include <cormoran/zmk/custom_settings.h>
+#include <drivers/input_processor.h>
 #include <zmk/pointing/input_processor_runtime.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -222,6 +224,112 @@ static int test_scaling_persists_across_reload(void) {
     return 0;
 }
 
+static int test_small_input_filter_persists_across_reload(void) {
+    const struct device *dev = zmk_input_processor_runtime_find_by_name(TEST_PROCESSOR_NAME);
+    if (!dev) {
+        LOG_ERR("Test processor '%s' not found", TEST_PROCESSOR_NAME);
+        return -ENODEV;
+    }
+
+    const uint16_t threshold = 17;
+    int ret = zmk_input_processor_runtime_set_small_input_filter(
+        dev, true, threshold, true, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_PERSIST);
+    if (ret < 0) {
+        LOG_ERR("set_small_input_filter failed: %d", ret);
+        return ret;
+    }
+    zmk_input_processor_runtime_test_flush_save(dev);
+
+    zmk_input_processor_runtime_reset(dev);
+    ret = settings_load_subtree("custom_settings");
+    if (ret < 0) {
+        LOG_ERR("settings_load_subtree failed: %d", ret);
+        return ret;
+    }
+    zmk_input_processor_runtime_test_apply_persisted_settings();
+
+    struct zmk_input_processor_runtime_config config;
+    ret = zmk_input_processor_runtime_get_config(dev, NULL, &config);
+    if (ret < 0) {
+        return ret;
+    }
+    if (!config.small_input_filter_enabled || config.small_input_threshold != threshold ||
+        !config.small_input_allow_after_large) {
+        LOG_ERR("Persisted small input filter not restored: enabled=%d threshold=%u "
+                "allow_after_large=%d",
+                config.small_input_filter_enabled, config.small_input_threshold,
+                config.small_input_allow_after_large);
+        return -EINVAL;
+    }
+
+    LOG_INF("PASS: rip_settings_small_input_filter threshold=%u", threshold);
+    return 0;
+}
+
+static int test_small_input_filter_raw_event_behavior(void) {
+    const struct device *dev = zmk_input_processor_runtime_find_by_name(TEST_PROCESSOR_NAME);
+    if (!dev) {
+        return -ENODEV;
+    }
+
+    // Isolate the filter test from scaling that earlier persistence tests may
+    // have installed, without changing their saved baseline.
+    int ret = zmk_input_processor_runtime_set_scaling(
+        dev, 1, 1, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY);
+    if (ret < 0) {
+        return ret;
+    }
+    ret = zmk_input_processor_runtime_set_small_input_filter(
+        dev, true, 10, false, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY);
+    if (ret < 0) {
+        return ret;
+    }
+
+    struct input_event event = {.type = INPUT_EV_REL, .code = INPUT_REL_X, .value = 10};
+    ret = zmk_input_processor_handle_event(dev, &event, 0, 0, NULL);
+    if (ret != ZMK_INPUT_PROC_CONTINUE || event.value != 0) {
+        LOG_ERR("Small X input was not suppressed: ret=%d value=%d", ret, event.value);
+        return -EINVAL;
+    }
+
+    event.value = 11;
+    ret = zmk_input_processor_handle_event(dev, &event, 0, 0, NULL);
+    if (ret != ZMK_INPUT_PROC_CONTINUE || event.value != 11) {
+        LOG_ERR("Large X input was not passed through: ret=%d value=%d", ret, event.value);
+        return -EINVAL;
+    }
+
+    ret = zmk_input_processor_runtime_set_small_input_filter(
+        dev, true, 10, true, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY);
+    if (ret < 0) {
+        return ret;
+    }
+
+    // A large X input allows the following small X input, while Y continues
+    // to filter independently.
+    event.code = INPUT_REL_X;
+    event.value = 11;
+    zmk_input_processor_handle_event(dev, &event, 0, 0, NULL);
+    event.value = 1;
+    zmk_input_processor_handle_event(dev, &event, 0, 0, NULL);
+    if (event.value != 1) {
+        LOG_ERR("Small X input after large X input was not passed through");
+        return -EINVAL;
+    }
+
+    event.code = INPUT_REL_Y;
+    event.value = 1;
+    zmk_input_processor_handle_event(dev, &event, 0, 0, NULL);
+    if (event.value != 0) {
+        LOG_ERR("Small Y input was incorrectly passed through after large X input");
+        return -EINVAL;
+    }
+
+    zmk_input_processor_runtime_restore_persistent(dev);
+    LOG_INF("PASS: rip_small_input_filter_raw_event_behavior");
+    return 0;
+}
+
 /* Exercises the write modes and the save/discard-all operations:
  *  - a WRITE_MODE_MEMORY write updates the baseline in RAM but must NOT reach
  *    flash, so discard_all (reload from flash) reverts it;
@@ -314,6 +422,16 @@ static int rip_settings_test_init(void) {
     ret = test_scaling_persists_across_reload();
     if (ret < 0) {
         LOG_ERR("FAIL: rip_settings_persist_reload ret=%d", ret);
+    }
+
+    ret = test_small_input_filter_persists_across_reload();
+    if (ret < 0) {
+        LOG_ERR("FAIL: rip_settings_small_input_filter ret=%d", ret);
+    }
+
+    ret = test_small_input_filter_raw_event_behavior();
+    if (ret < 0) {
+        LOG_ERR("FAIL: rip_small_input_filter_raw_event_behavior ret=%d", ret);
     }
 
     ret = test_write_modes_and_save_discard();

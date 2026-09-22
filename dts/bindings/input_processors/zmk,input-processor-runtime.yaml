@@ -132,3 +132,16 @@ properties:
   y-invert:
     type: boolean
     description: If present, invert Y axis values (positive becomes negative and vice versa)
+
+  small-input-filter-enabled:
+    type: boolean
+    description: If present, suppress raw X/Y inputs whose absolute value is at or below small-input-threshold
+
+  small-input-threshold:
+    type: int
+    default: 0
+    description: Raw X/Y input magnitude at or below which input is suppressed when small-input-filter-enabled is present
+
+  small-input-allow-after-large:
+    type: boolean
+    description: If present, allow one small input on an axis after a threshold-exceeding input on the same axis

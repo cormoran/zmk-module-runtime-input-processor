@@ -89,6 +89,8 @@ static int handle_set_x_invert(const cormoran_rip_SetXInvertRequest *req,
                                cormoran_rip_Response *resp);
 static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
                                cormoran_rip_Response *resp);
+static int handle_set_small_input_filter(const cormoran_rip_SetSmallInputFilterRequest *req,
+                                         cormoran_rip_Response *resp);
 static int handle_save_all_settings(const cormoran_rip_SaveAllSettingsRequest *req,
                                     cormoran_rip_Response *resp);
 static int handle_discard_all_settings(const cormoran_rip_DiscardAllSettingsRequest *req,
@@ -187,6 +189,9 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         break;
     case cormoran_rip_Request_reset_all_settings_tag:
         rc = handle_reset_all_settings(&req.request_type.reset_all_settings, resp);
+        break;
+    case cormoran_rip_Request_set_small_input_filter_tag:
+        rc = handle_set_small_input_filter(&req.request_type.set_small_input_filter, resp);
         break;
     default:
         LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -301,6 +306,9 @@ static int handle_get_input_processor(const cormoran_rip_GetInputProcessorReques
     result.processor.axis_snap_timeout_ms = config.axis_snap_timeout_ms;
     result.processor.x_invert = config.x_invert;
     result.processor.y_invert = config.y_invert;
+    result.processor.small_input_filter_enabled = config.small_input_filter_enabled;
+    result.processor.small_input_threshold = config.small_input_threshold;
+    result.processor.small_input_allow_after_large = config.small_input_allow_after_large;
 
     resp->which_response_type = cormoran_rip_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -843,6 +851,38 @@ static int handle_set_xy_swap_enabled(const cormoran_rip_SetXySwapEnabledRequest
     resp->response_type.set_xy_swap_enabled =
         (cormoran_rip_SetXySwapEnabledResponse)cormoran_rip_SetXySwapEnabledResponse_init_zero;
 
+    return 0;
+}
+
+/**
+ * Handle setting raw small input filtering.
+ */
+static int handle_set_small_input_filter(const cormoran_rip_SetSmallInputFilterRequest *req,
+                                         cormoran_rip_Response *resp) {
+    LOG_DBG("Setting small input filter for id=%d: enabled=%d threshold=%d allow_after_large=%d",
+            req->id, req->enabled, req->threshold, req->allow_after_large);
+
+    if (req->threshold > UINT16_MAX) {
+        return -EINVAL;
+    }
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    int ret = zmk_input_processor_runtime_set_small_input_filter(
+        dev, req->enabled, (uint16_t)req->threshold, req->allow_after_large,
+        rip_write_mode(req->write_mode));
+    if (ret < 0) {
+        LOG_ERR("Failed to set small input filter: %d", ret);
+        return ret;
+    }
+
+    resp->which_response_type = cormoran_rip_Response_set_small_input_filter_tag;
+    resp->response_type.set_small_input_filter = (cormoran_rip_SetSmallInputFilterResponse)
+        cormoran_rip_SetSmallInputFilterResponse_init_zero;
     return 0;
 }
 

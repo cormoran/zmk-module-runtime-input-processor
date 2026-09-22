@@ -61,6 +61,10 @@ struct runtime_processor_config {
     // Axis reverse default settings from DT
     bool initial_x_invert;
     bool initial_y_invert;
+    // Small input filter default settings from DT
+    bool initial_small_input_filter_enabled;
+    uint16_t initial_small_input_threshold;
+    bool initial_small_input_allow_after_large;
 };
 
 struct runtime_processor_data {
@@ -133,6 +137,21 @@ struct runtime_processor_data {
     // Persistent axis reverse settings
     bool persistent_x_invert;
     bool persistent_y_invert;
+
+    // Small input filter settings. This operates on raw X/Y values before any
+    // mapping or transformation.
+    bool small_input_filter_enabled;
+    uint16_t small_input_threshold;
+    bool small_input_allow_after_large;
+
+    // Persistent small input filter settings
+    bool persistent_small_input_filter_enabled;
+    uint16_t persistent_small_input_threshold;
+    bool persistent_small_input_allow_after_large;
+
+    // Per-axis raw-input history used by small_input_allow_after_large.
+    bool last_x_input_was_large;
+    bool last_y_input_was_large;
 
     // Temp-layer runtime state
     struct k_work_delayable temp_layer_activation_work;
@@ -259,6 +278,27 @@ static int scale_val(struct input_event *event, uint32_t mul, uint32_t div,
     return 0;
 }
 
+static void reset_small_input_filter_history(struct runtime_processor_data *data) {
+    data->last_x_input_was_large = false;
+    data->last_y_input_was_large = false;
+}
+
+static bool should_ignore_small_input(struct runtime_processor_data *data, bool is_x,
+                                      int32_t raw_value) {
+    uint32_t magnitude = raw_value < 0 ? (uint32_t)(-(int64_t)raw_value) : (uint32_t)raw_value;
+    bool is_large = magnitude > data->small_input_threshold;
+    bool previous_was_large = is_x ? data->last_x_input_was_large : data->last_y_input_was_large;
+
+    if (is_x) {
+        data->last_x_input_was_large = is_large;
+    } else {
+        data->last_y_input_was_large = is_large;
+    }
+
+    return data->small_input_filter_enabled && !is_large &&
+           !(data->small_input_allow_after_large && previous_was_large);
+}
+
 static int runtime_processor_handle_event(const struct device *dev, struct input_event *event,
                                           uint32_t param1, uint32_t param2,
                                           struct zmk_input_processor_state *state) {
@@ -283,6 +323,16 @@ static int runtime_processor_handle_event(const struct device *dev, struct input
 
     bool is_x = (x_idx >= 0);
     int16_t value = event->value;
+
+    // Filter the unmodified input value before code mapping, rotation, axis
+    // inversion, axis snapping, and scaling. A large input on one axis only
+    // affects the next input on that same axis.
+    if (should_ignore_small_input(data, is_x, event->value)) {
+        event->value = 0;
+        LOG_DBG("Small input filter: suppressed raw %c input %d (threshold=%u)",
+                is_x ? 'X' : 'Y', value, data->small_input_threshold);
+        return ZMK_INPUT_PROC_CONTINUE;
+    }
 
     // Apply code mapping (XY swap and XY-to-scroll)
     // These mappings are mutually exclusive - XY-to-scroll takes precedence
@@ -481,7 +531,7 @@ static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
 /*
  * Persistence backend: one zmk-feature-custom-settings entry per processor
  * (subsystem "cormoran_rip", key = the processor's compile-time
- * processor-label), storing a version-byte-prefixed raw memcpy of the 15
+ * processor-label), storing a version-byte-prefixed raw memcpy of the 18
  * persisted fields. See docs/design/custom-settings-storage.md.
  *
  * This id MUST match a registered ZMK_RPC_CUSTOM_SUBSYSTEM identifier: the
@@ -499,10 +549,10 @@ static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
  * see the load path below), so the generic surface is for visibility/inspection.
  */
 #define RIP_SETTINGS_SUBSYSTEM_ID "cormoran_rip"
-#define RIP_SETTINGS_BLOB_VERSION 1
+#define RIP_SETTINGS_BLOB_VERSION 2
 
 /*
- * The persisted-on-flash struct for one processor's 15 settings fields.
+ * The persisted-on-flash struct for one processor's 18 settings fields.
  * Stored as a raw memcpy (see pack/unpack below) rather than a hand-serialized
  * byte stream: it is only ever written and read back by this same firmware
  * image, so the in-memory layout is a valid wire format, and the leading
@@ -512,7 +562,7 @@ static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
  * kept). This is the same field set the module previously persisted; there is
  * no on-flash backward-compat requirement with the old settings_save_one blob.
  */
-struct rip_persist_v1 {
+struct rip_persist_v2 {
     uint32_t scale_multiplier;
     uint32_t scale_divisor;
     int32_t rotation_degrees;
@@ -528,10 +578,13 @@ struct rip_persist_v1 {
     bool xy_swap_enabled;
     bool x_invert;
     bool y_invert;
+    bool small_input_filter_enabled;
+    uint16_t small_input_threshold;
+    bool small_input_allow_after_large;
 };
 
-/* On-disk BYTES layout: [uint8_t version][raw struct rip_persist_v1 bytes]. */
-#define RIP_SETTINGS_BLOB_SIZE (1 + sizeof(struct rip_persist_v1))
+/* On-disk BYTES layout: [uint8_t version][raw struct rip_persist_v2 bytes]. */
+#define RIP_SETTINGS_BLOB_SIZE (1 + sizeof(struct rip_persist_v2))
 
 BUILD_ASSERT(RIP_SETTINGS_BLOB_SIZE <= CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE,
              "runtime input processor settings blob exceeds "
@@ -549,7 +602,7 @@ BUILD_ASSERT(RIP_SETTINGS_BLOB_SIZE <= CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE
  * and returns the number of bytes written. Version byte is written separately
  * from the struct memcpy so no wrapper-struct padding enters the layout. */
 static size_t pack_processor_settings(const struct runtime_processor_data *data, uint8_t *buf) {
-    struct rip_persist_v1 settings = {
+    struct rip_persist_v2 settings = {
         .scale_multiplier = data->persistent_scale_multiplier,
         .scale_divisor = data->persistent_scale_divisor,
         .rotation_degrees = data->persistent_rotation_degrees,
@@ -565,6 +618,9 @@ static size_t pack_processor_settings(const struct runtime_processor_data *data,
         .xy_swap_enabled = data->persistent_xy_swap_enabled,
         .x_invert = data->persistent_x_invert,
         .y_invert = data->persistent_y_invert,
+        .small_input_filter_enabled = data->persistent_small_input_filter_enabled,
+        .small_input_threshold = data->persistent_small_input_threshold,
+        .small_input_allow_after_large = data->persistent_small_input_allow_after_large,
     };
 
     buf[0] = RIP_SETTINGS_BLOB_VERSION;
@@ -585,7 +641,7 @@ static int unpack_and_apply_processor_settings(struct runtime_processor_data *da
         return -EINVAL;
     }
 
-    struct rip_persist_v1 settings;
+    struct rip_persist_v2 settings;
     memcpy(&settings, &buf[1], sizeof(settings));
 
     data->persistent_scale_multiplier = settings.scale_multiplier;
@@ -603,6 +659,9 @@ static int unpack_and_apply_processor_settings(struct runtime_processor_data *da
     data->persistent_xy_swap_enabled = settings.xy_swap_enabled;
     data->persistent_x_invert = settings.x_invert;
     data->persistent_y_invert = settings.y_invert;
+    data->persistent_small_input_filter_enabled = settings.small_input_filter_enabled;
+    data->persistent_small_input_threshold = settings.small_input_threshold;
+    data->persistent_small_input_allow_after_large = settings.small_input_allow_after_large;
 
     // Apply to current values
     data->scale_multiplier = settings.scale_multiplier;
@@ -620,6 +679,10 @@ static int unpack_and_apply_processor_settings(struct runtime_processor_data *da
     data->xy_swap_enabled = settings.xy_swap_enabled;
     data->x_invert = settings.x_invert;
     data->y_invert = settings.y_invert;
+    data->small_input_filter_enabled = settings.small_input_filter_enabled;
+    data->small_input_threshold = settings.small_input_threshold;
+    data->small_input_allow_after_large = settings.small_input_allow_after_large;
+    reset_small_input_filter_history(data);
     update_rotation_values(data);
 
     return 0;
@@ -730,6 +793,15 @@ static int runtime_processor_init(const struct device *dev) {
     data->y_invert = cfg->initial_y_invert;
     data->persistent_x_invert = cfg->initial_x_invert;
     data->persistent_y_invert = cfg->initial_y_invert;
+
+    // Initialize small input filter settings from DT defaults.
+    data->small_input_filter_enabled = cfg->initial_small_input_filter_enabled;
+    data->small_input_threshold = cfg->initial_small_input_threshold;
+    data->small_input_allow_after_large = cfg->initial_small_input_allow_after_large;
+    data->persistent_small_input_filter_enabled = cfg->initial_small_input_filter_enabled;
+    data->persistent_small_input_threshold = cfg->initial_small_input_threshold;
+    data->persistent_small_input_allow_after_large = cfg->initial_small_input_allow_after_large;
+    reset_small_input_filter_history(data);
 
     update_rotation_values(data);
 
@@ -867,6 +939,15 @@ static void load_processor_defaults(const struct device *dev) {
     data->persistent_x_invert = cfg->initial_x_invert;
     data->persistent_y_invert = cfg->initial_y_invert;
 
+    // Reset small input filter settings to defaults.
+    data->small_input_filter_enabled = cfg->initial_small_input_filter_enabled;
+    data->small_input_threshold = cfg->initial_small_input_threshold;
+    data->small_input_allow_after_large = cfg->initial_small_input_allow_after_large;
+    data->persistent_small_input_filter_enabled = cfg->initial_small_input_filter_enabled;
+    data->persistent_small_input_threshold = cfg->initial_small_input_threshold;
+    data->persistent_small_input_allow_after_large = cfg->initial_small_input_allow_after_large;
+    reset_small_input_filter_history(data);
+
     update_rotation_values(data);
 }
 
@@ -960,6 +1041,12 @@ void zmk_input_processor_runtime_restore_persistent(const struct device *dev) {
     data->x_invert = data->persistent_x_invert;
     data->y_invert = data->persistent_y_invert;
 
+    // Restore small input filter settings and discard its event history.
+    data->small_input_filter_enabled = data->persistent_small_input_filter_enabled;
+    data->small_input_threshold = data->persistent_small_input_threshold;
+    data->small_input_allow_after_large = data->persistent_small_input_allow_after_large;
+    reset_small_input_filter_history(data);
+
     LOG_DBG("Restored persistent values");
 }
 
@@ -992,6 +1079,9 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         config->xy_swap_enabled = data->persistent_xy_swap_enabled;
         config->x_invert = data->persistent_x_invert;
         config->y_invert = data->persistent_y_invert;
+        config->small_input_filter_enabled = data->persistent_small_input_filter_enabled;
+        config->small_input_threshold = data->persistent_small_input_threshold;
+        config->small_input_allow_after_large = data->persistent_small_input_allow_after_large;
     }
 
     return 0;
@@ -1048,6 +1138,10 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         .initial_xy_swap_enabled = DT_INST_PROP(n, xy_swap_enabled),                               \
         .initial_x_invert = DT_INST_PROP(n, x_invert),                                             \
         .initial_y_invert = DT_INST_PROP(n, y_invert),                                             \
+        .initial_small_input_filter_enabled = DT_INST_PROP(n, small_input_filter_enabled),         \
+        .initial_small_input_threshold = DT_INST_PROP_OR(n, small_input_threshold, 0),              \
+        .initial_small_input_allow_after_large =                                                    \
+            DT_INST_PROP(n, small_input_allow_after_large),                                        \
     };                                                                                             \
     static struct runtime_processor_data runtime_data_##n;                                         \
     DEVICE_DT_INST_DEFINE(n, &runtime_processor_init, NULL, &runtime_data_##n,                     \
@@ -1686,6 +1780,31 @@ int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool inve
     }
 
     LOG_INF("Y axis invert: %s%s", invert ? "true" : "false", write_mode_label(mode));
+
+    return commit_write(dev, mode);
+}
+
+int zmk_input_processor_runtime_set_small_input_filter(
+    const struct device *dev, bool enabled, uint16_t threshold, bool allow_after_large,
+    enum zmk_input_processor_runtime_write_mode mode) {
+    if (!dev) {
+        return -EINVAL;
+    }
+
+    struct runtime_processor_data *data = dev->data;
+    data->small_input_filter_enabled = enabled;
+    data->small_input_threshold = threshold;
+    data->small_input_allow_after_large = allow_after_large;
+    reset_small_input_filter_history(data);
+
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
+        data->persistent_small_input_filter_enabled = enabled;
+        data->persistent_small_input_threshold = threshold;
+        data->persistent_small_input_allow_after_large = allow_after_large;
+    }
+
+    LOG_INF("Small input filter: enabled=%d, threshold=%u, allow_after_large=%d%s", enabled,
+            threshold, allow_after_large, write_mode_label(mode));
 
     return commit_write(dev, mode);
 }

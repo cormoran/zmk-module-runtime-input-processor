@@ -42,6 +42,10 @@ message InputProcessorInfo {
     // Axis invert settings
     bool x_invert = 16; // Whether to invert X axis
     bool y_invert = 17; // Whether to invert Y axis
+    // Raw small input filter settings
+    bool small_input_filter_enabled = 18;
+    uint32 small_input_threshold = 19;
+    bool small_input_allow_after_large = 20;
 }
 
 message ListInputProcessorsRequest {
@@ -229,6 +233,18 @@ message SetYInvertResponse {
     // Empty - use notification to report changes
 }
 
+message SetSmallInputFilterRequest {
+    uint32 id = 1;                     // ID of the input processor to update
+    bool enabled = 2;                  // Whether the raw input filter is enabled
+    uint32 threshold = 3;              // X/Y raw input magnitude to suppress
+    bool allow_after_large = 4;        // Allow one small input after a large same-axis input
+    WriteMode write_mode = 5;          // Where to store the value (default: persist)
+}
+
+message SetSmallInputFilterResponse {
+    // Empty - use notification to report changes
+}
+
 // Persist every processor's current in-memory settings to flash. Flushes values
 // that were set with WRITE_MODE_MEMORY.
 message SaveAllSettingsRequest {
@@ -283,6 +299,7 @@ message Request {
         SaveAllSettingsRequest save_all_settings = 20;
         DiscardAllSettingsRequest discard_all_settings = 21;
         ResetAllSettingsRequest reset_all_settings = 22;
+        SetSmallInputFilterRequest set_small_input_filter = 23;
     }
 }
 
@@ -313,6 +330,7 @@ message Response {
         SaveAllSettingsResponse save_all_settings = 21;
         DiscardAllSettingsResponse discard_all_settings = 22;
         ResetAllSettingsResponse reset_all_settings = 23;
+        SetSmallInputFilterResponse set_small_input_filter = 24;
     }
 }
 

@@ -188,6 +188,28 @@ and the setters take a `zmk_input_processor_runtime_write_mode`
   - Example: `2/1` = 2x faster, `1/2` = 0.5x slower
   - Values are applied as: `output = input * multiplier / divisor`
   - Remainders are tracked for precise scaling
+- **Small Input Filter**: Suppresses raw X/Y input values whose absolute value
+  is at or below a shared threshold. It is disabled by default and runs before
+  code mapping, rotation, inversion, axis snapping, and scaling. Optionally,
+  a threshold-exceeding value on an axis can allow the following small value on
+  that same axis; X and Y history are independent.
+
+### Small Input Filter
+
+Enable the filter in the Web UI with **Ignore Small Inputs**, then choose one
+threshold shared by X and Y. A raw input with an absolute value at or below the
+threshold becomes zero before any other processor transformation. The optional
+**Allow the next small input after a large input** setting is tracked per axis:
+a value greater than the threshold on X only allows the next small X value,
+and does not affect Y.
+
+It is disabled by default. The equivalent device-tree defaults are:
+
+```dts
+small-input-filter-enabled;
+small-input-threshold = <10>;
+small-input-allow-after-large;
+```
 
 ### Example Configurations
 
