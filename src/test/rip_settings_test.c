@@ -50,6 +50,28 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 /* processor-label of tests/studio/native_sim.keymap's runtime_input_processor. */
 #define TEST_PROCESSOR_NAME "default"
+#define RIP_SETTINGS_SUBSYSTEM_ID "cormoran_rip"
+#define RIP_SETTINGS_BLOB_V1_VERSION 1
+
+/* Historical V1 on-flash layout. Keep this independent from the production
+ * V2 struct so this test continues to exercise the upgrade decoder. */
+struct rip_persist_v1 {
+    uint32_t scale_multiplier;
+    uint32_t scale_divisor;
+    int32_t rotation_degrees;
+    bool temp_layer_enabled;
+    uint8_t temp_layer_layer;
+    uint16_t temp_layer_activation_delay_ms;
+    uint16_t temp_layer_deactivation_delay_ms;
+    uint32_t active_layers;
+    uint8_t axis_snap_mode;
+    uint16_t axis_snap_threshold;
+    uint16_t axis_snap_timeout_ms;
+    bool xy_to_scroll_enabled;
+    bool xy_swap_enabled;
+    bool x_invert;
+    bool y_invert;
+};
 
 /* --- Minimal fake in-RAM settings backend -------------------------------
  * ZMK main() normally calls settings_subsys_init() + settings_load() after
@@ -221,6 +243,101 @@ static int test_scaling_persists_across_reload(void) {
 
     LOG_INF("PASS: rip_settings_persist_reload scale=%u/%u", after.scale_multiplier,
             after.scale_divisor);
+    return 0;
+}
+
+static int test_v1_settings_migrate_across_reload(void) {
+    const struct device *dev = zmk_input_processor_runtime_find_by_name(TEST_PROCESSOR_NAME);
+    if (!dev) {
+        return -ENODEV;
+    }
+
+    // V1 predates the small-input filter. Capture those new-field defaults
+    // before loading a historical blob, so the test is not tied to this
+    // particular test keymap's defaults.
+    int ret = zmk_input_processor_runtime_reset(dev);
+    if (ret < 0) {
+        return ret;
+    }
+    struct zmk_input_processor_runtime_config defaults;
+    ret = zmk_input_processor_runtime_get_config(dev, NULL, &defaults);
+    if (ret < 0) {
+        return ret;
+    }
+
+    const struct rip_persist_v1 legacy = {
+        .scale_multiplier = 7,
+        .scale_divisor = 9,
+        .rotation_degrees = -32,
+        .temp_layer_enabled = true,
+        .temp_layer_layer = 4,
+        .temp_layer_activation_delay_ms = 321,
+        .temp_layer_deactivation_delay_ms = 654,
+        .active_layers = 0x11223344,
+        .axis_snap_mode = 2,
+        .axis_snap_threshold = 96,
+        .axis_snap_timeout_ms = 200,
+        .xy_to_scroll_enabled = true,
+        .xy_swap_enabled = false,
+        .x_invert = true,
+        .y_invert = false,
+    };
+    struct zmk_custom_setting_value value = {
+        .type = ZMK_CUSTOM_SETTING_VALUE_TYPE_BYTES,
+        .size = 1 + sizeof(legacy),
+    };
+    value.bytes_value[0] = RIP_SETTINGS_BLOB_V1_VERSION;
+    memcpy(&value.bytes_value[1], &legacy, sizeof(legacy));
+
+    ret = zmk_custom_setting_write_by_key(RIP_SETTINGS_SUBSYSTEM_ID, TEST_PROCESSOR_NAME, &value,
+                                          ZMK_CUSTOM_SETTING_WRITE_MODE_PERSIST);
+    if (ret < 0) {
+        LOG_ERR("Writing V1 settings fixture failed: %d", ret);
+        return ret;
+    }
+
+    // Reload through the same custom-settings and boot-apply path used after
+    // a firmware upgrade.
+    ret = settings_load_subtree("custom_settings");
+    if (ret < 0) {
+        return ret;
+    }
+    zmk_input_processor_runtime_test_apply_persisted_settings();
+
+    struct zmk_input_processor_runtime_config migrated;
+    ret = zmk_input_processor_runtime_get_config(dev, NULL, &migrated);
+    if (ret < 0) {
+        return ret;
+    }
+    if (migrated.scale_multiplier != legacy.scale_multiplier ||
+        migrated.scale_divisor != legacy.scale_divisor ||
+        migrated.rotation_degrees != legacy.rotation_degrees ||
+        migrated.temp_layer_enabled != legacy.temp_layer_enabled ||
+        migrated.temp_layer_layer != legacy.temp_layer_layer ||
+        migrated.temp_layer_activation_delay_ms != legacy.temp_layer_activation_delay_ms ||
+        migrated.temp_layer_deactivation_delay_ms != legacy.temp_layer_deactivation_delay_ms ||
+        migrated.active_layers != legacy.active_layers ||
+        migrated.axis_snap_mode != legacy.axis_snap_mode ||
+        migrated.axis_snap_threshold != legacy.axis_snap_threshold ||
+        migrated.axis_snap_timeout_ms != legacy.axis_snap_timeout_ms ||
+        migrated.xy_to_scroll_enabled != legacy.xy_to_scroll_enabled ||
+        migrated.xy_swap_enabled != legacy.xy_swap_enabled ||
+        migrated.x_invert != legacy.x_invert || migrated.y_invert != legacy.y_invert ||
+        migrated.small_input_filter_enabled != defaults.small_input_filter_enabled ||
+        migrated.small_input_threshold != defaults.small_input_threshold ||
+        migrated.small_input_allow_after_large != defaults.small_input_allow_after_large) {
+        LOG_ERR("V1 settings were not migrated correctly");
+        return -EINVAL;
+    }
+
+    // Do not let this deliberately non-default fixture affect later tests.
+    ret = zmk_input_processor_runtime_reset(dev);
+    if (ret < 0) {
+        return ret;
+    }
+    zmk_input_processor_runtime_test_flush_save(dev);
+
+    LOG_INF("PASS: rip_settings_v1_migration");
     return 0;
 }
 
@@ -422,6 +539,11 @@ static int rip_settings_test_init(void) {
     ret = test_scaling_persists_across_reload();
     if (ret < 0) {
         LOG_ERR("FAIL: rip_settings_persist_reload ret=%d", ret);
+    }
+
+    ret = test_v1_settings_migrate_across_reload();
+    if (ret < 0) {
+        LOG_ERR("FAIL: rip_settings_v1_migration ret=%d", ret);
     }
 
     ret = test_small_input_filter_persists_across_reload();

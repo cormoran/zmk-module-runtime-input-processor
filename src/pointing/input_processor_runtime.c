@@ -550,18 +550,37 @@ static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
  */
 #define RIP_SETTINGS_SUBSYSTEM_ID "cormoran_rip"
 #define RIP_SETTINGS_BLOB_VERSION 2
+#define RIP_SETTINGS_BLOB_V1_VERSION 1
 
 /*
  * The persisted-on-flash struct for one processor's 18 settings fields.
  * Stored as a raw memcpy (see pack/unpack below) rather than a hand-serialized
- * byte stream: it is only ever written and read back by this same firmware
- * image, so the in-memory layout is a valid wire format, and the leading
- * version byte + exact-size check guard against a struct-layout change (a
- * future firmware that alters this struct must bump RIP_SETTINGS_BLOB_VERSION,
- * after which an old blob is rejected by size/version and DT defaults are
- * kept). This is the same field set the module previously persisted; there is
- * no on-flash backward-compat requirement with the old settings_save_one blob.
+ * byte stream: it is only ever written and read back by the same target
+ * architecture, so the in-memory layout is a valid wire format. The leading
+ * version byte + exact-size check guard against a struct-layout change. V1 is
+ * decoded below so an upgrade preserves its settings; new V2-only fields use
+ * their devicetree defaults. A future incompatible format must either add a
+ * decoder here or deliberately reject the old blob. There is no compatibility
+ * requirement with the pre-custom-settings settings_save_one blob.
  */
+struct rip_persist_v1 {
+    uint32_t scale_multiplier;
+    uint32_t scale_divisor;
+    int32_t rotation_degrees;
+    bool temp_layer_enabled;
+    uint8_t temp_layer_layer;
+    uint16_t temp_layer_activation_delay_ms;
+    uint16_t temp_layer_deactivation_delay_ms;
+    uint32_t active_layers;
+    uint8_t axis_snap_mode;
+    uint16_t axis_snap_threshold;
+    uint16_t axis_snap_timeout_ms;
+    bool xy_to_scroll_enabled;
+    bool xy_swap_enabled;
+    bool x_invert;
+    bool y_invert;
+};
+
 struct rip_persist_v2 {
     uint32_t scale_multiplier;
     uint32_t scale_divisor;
@@ -585,6 +604,7 @@ struct rip_persist_v2 {
 
 /* On-disk BYTES layout: [uint8_t version][raw struct rip_persist_v2 bytes]. */
 #define RIP_SETTINGS_BLOB_SIZE (1 + sizeof(struct rip_persist_v2))
+#define RIP_SETTINGS_BLOB_V1_SIZE (1 + sizeof(struct rip_persist_v1))
 
 BUILD_ASSERT(RIP_SETTINGS_BLOB_SIZE <= CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE,
              "runtime input processor settings blob exceeds "
@@ -630,19 +650,41 @@ static size_t pack_processor_settings(const struct runtime_processor_data *data,
 
 /* Unpacks a persisted blob and applies it to both the persistent_* baseline
  * and the current active values (matching the old load_processor_settings_cb
- * behavior), then recomputes rotation. Returns 0 on success, -EINVAL if the
- * blob size or version does not match (caller should keep DT defaults). */
-static int unpack_and_apply_processor_settings(struct runtime_processor_data *data,
+ * behavior), then recomputes rotation. V1 has no small-input-filter fields,
+ * so their devicetree defaults are used when it is loaded. */
+static int unpack_and_apply_processor_settings(const struct runtime_processor_config *cfg,
+                                               struct runtime_processor_data *data,
                                                const uint8_t *buf, size_t len) {
-    /* Require both the exact expected total size and the matching version.
-     * A size mismatch alone (e.g. after a struct-layout change without a
-     * version bump) already implies the bytes are not interpretable. */
-    if (len != RIP_SETTINGS_BLOB_SIZE || buf[0] != RIP_SETTINGS_BLOB_VERSION) {
+    struct rip_persist_v2 settings;
+
+    if (len == RIP_SETTINGS_BLOB_SIZE && buf[0] == RIP_SETTINGS_BLOB_VERSION) {
+        memcpy(&settings, &buf[1], sizeof(settings));
+    } else if (len == RIP_SETTINGS_BLOB_V1_SIZE && buf[0] == RIP_SETTINGS_BLOB_V1_VERSION) {
+        struct rip_persist_v1 legacy_settings;
+        memcpy(&legacy_settings, &buf[1], sizeof(legacy_settings));
+        settings = (struct rip_persist_v2){
+            .scale_multiplier = legacy_settings.scale_multiplier,
+            .scale_divisor = legacy_settings.scale_divisor,
+            .rotation_degrees = legacy_settings.rotation_degrees,
+            .temp_layer_enabled = legacy_settings.temp_layer_enabled,
+            .temp_layer_layer = legacy_settings.temp_layer_layer,
+            .temp_layer_activation_delay_ms = legacy_settings.temp_layer_activation_delay_ms,
+            .temp_layer_deactivation_delay_ms = legacy_settings.temp_layer_deactivation_delay_ms,
+            .active_layers = legacy_settings.active_layers,
+            .axis_snap_mode = legacy_settings.axis_snap_mode,
+            .axis_snap_threshold = legacy_settings.axis_snap_threshold,
+            .axis_snap_timeout_ms = legacy_settings.axis_snap_timeout_ms,
+            .xy_to_scroll_enabled = legacy_settings.xy_to_scroll_enabled,
+            .xy_swap_enabled = legacy_settings.xy_swap_enabled,
+            .x_invert = legacy_settings.x_invert,
+            .y_invert = legacy_settings.y_invert,
+            .small_input_filter_enabled = cfg->initial_small_input_filter_enabled,
+            .small_input_threshold = cfg->initial_small_input_threshold,
+            .small_input_allow_after_large = cfg->initial_small_input_allow_after_large,
+        };
+    } else {
         return -EINVAL;
     }
-
-    struct rip_persist_v2 settings;
-    memcpy(&settings, &buf[1], sizeof(settings));
 
     data->persistent_scale_multiplier = settings.scale_multiplier;
     data->persistent_scale_divisor = settings.scale_divisor;
@@ -1253,7 +1295,7 @@ static int apply_persisted_settings_cb(const struct device *dev, void *user_data
         return 0;
     }
 
-    if (unpack_and_apply_processor_settings(data, value.bytes_value, value.size) < 0) {
+    if (unpack_and_apply_processor_settings(cfg, data, value.bytes_value, value.size) < 0) {
         LOG_WRN("Ignoring invalid persisted settings for %s (size=%u)", cfg->name,
                 (unsigned int)value.size);
         return 0;
@@ -1303,7 +1345,7 @@ static int discard_processor_settings_cb(const struct device *dev, void *user_da
     struct zmk_custom_setting_value value;
     int ret = zmk_custom_setting_read_by_key(RIP_SETTINGS_SUBSYSTEM_ID, cfg->name, &value);
     if (ret == 0 && value.type == ZMK_CUSTOM_SETTING_VALUE_TYPE_BYTES && value.size > 0 &&
-        unpack_and_apply_processor_settings(data, value.bytes_value, value.size) == 0) {
+        unpack_and_apply_processor_settings(cfg, data, value.bytes_value, value.size) == 0) {
         LOG_INF("Discarded unsaved changes for %s (reloaded from flash)", cfg->name);
     } else {
         load_processor_defaults(dev);
