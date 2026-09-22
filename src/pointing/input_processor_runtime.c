@@ -329,8 +329,8 @@ static int runtime_processor_handle_event(const struct device *dev, struct input
     // affects the next input on that same axis.
     if (should_ignore_small_input(data, is_x, event->value)) {
         event->value = 0;
-        LOG_DBG("Small input filter: suppressed raw %c input %d (threshold=%u)",
-                is_x ? 'X' : 'Y', value, data->small_input_threshold);
+        LOG_DBG("Small input filter: suppressed raw %c input %d (threshold=%u)", is_x ? 'X' : 'Y',
+                value, data->small_input_threshold);
         return ZMK_INPUT_PROC_CONTINUE;
     }
 
@@ -1139,9 +1139,8 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         .initial_x_invert = DT_INST_PROP(n, x_invert),                                             \
         .initial_y_invert = DT_INST_PROP(n, y_invert),                                             \
         .initial_small_input_filter_enabled = DT_INST_PROP(n, small_input_filter_enabled),         \
-        .initial_small_input_threshold = DT_INST_PROP_OR(n, small_input_threshold, 0),              \
-        .initial_small_input_allow_after_large =                                                    \
-            DT_INST_PROP(n, small_input_allow_after_large),                                        \
+        .initial_small_input_threshold = DT_INST_PROP_OR(n, small_input_threshold, 0),             \
+        .initial_small_input_allow_after_large = DT_INST_PROP(n, small_input_allow_after_large),   \
     };                                                                                             \
     static struct runtime_processor_data runtime_data_##n;                                         \
     DEVICE_DT_INST_DEFINE(n, &runtime_processor_init, NULL, &runtime_data_##n,                     \

@@ -76,7 +76,7 @@ message GetLayerInfoResponse {
 }
 
 message SetScaleMultiplierRequest {
-    uint32 id = 1;             // ID of the input processor to update
+    uint32 id = 1;            // ID of the input processor to update
     uint32 value = 2;         // New scaling multiplier
     WriteMode write_mode = 3; // Where to store the value (default: persist)
 }
@@ -234,11 +234,11 @@ message SetYInvertResponse {
 }
 
 message SetSmallInputFilterRequest {
-    uint32 id = 1;                     // ID of the input processor to update
-    bool enabled = 2;                  // Whether the raw input filter is enabled
-    uint32 threshold = 3;              // X/Y raw input magnitude to suppress
-    bool allow_after_large = 4;        // Allow one small input after a large same-axis input
-    WriteMode write_mode = 5;          // Where to store the value (default: persist)
+    uint32 id = 1;              // ID of the input processor to update
+    bool enabled = 2;           // Whether the raw input filter is enabled
+    uint32 threshold = 3;       // X/Y raw input magnitude to suppress
+    bool allow_after_large = 4; // Allow one small input after a large same-axis input
+    WriteMode write_mode = 5;   // Where to store the value (default: persist)
 }
 
 message SetSmallInputFilterResponse {
