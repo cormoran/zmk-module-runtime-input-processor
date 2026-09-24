@@ -4,8 +4,12 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { setupZMKMocks } from "@cormoran/zmk-studio-react-hook/testing";
-import App from "../src/App";
+import {
+  createConnectedMockZMKApp,
+  setupZMKMocks,
+  ZMKAppProvider,
+} from "@cormoran/zmk-studio-react-hook/testing";
+import App, { InputProcessorManager } from "../src/App";
 
 // Mock the ZMK client, but keep real exports (e.g. `MetaError`) that
 // @cormoran/zmk-studio-react-hook's useStudioLockState relies on for
@@ -25,10 +29,15 @@ jest.mock("@zmkfirmware/zmk-studio-ts-client/transport/gatt", () => ({
 // connect) so that a manual USB connect remembers the port for auto-reconnect
 // -- see @cormoran/zmk-studio-react-hook's README. Mock just that one export,
 // keeping everything else (ZMKConnection, hooks, etc.) real.
-jest.mock("@cormoran/zmk-studio-react-hook", () => ({
-  ...jest.requireActual("@cormoran/zmk-studio-react-hook"),
-  connectSerial: jest.fn(),
-}));
+jest.mock("@cormoran/zmk-studio-react-hook", () => {
+  const actual = jest.requireActual("@cormoran/zmk-studio-react-hook");
+  return {
+    ...actual,
+    connectSerial: jest.fn(),
+    useCustomSubsystem: jest.fn(actual.useCustomSubsystem),
+    useStudioLockState: jest.fn(() => ({ locked: false })),
+  };
+});
 
 // jsdom defines neither navigator.serial nor navigator.bluetooth by default;
 // define/delete them per test to exercise feature detection.
@@ -216,6 +225,35 @@ describe("App Component", () => {
       await waitFor(() => {
         expect(screen.getByText(/Chromium-based browser/i)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("Initial loading", () => {
+    it("loads once when the subsystem object changes identity on render", async () => {
+      const zmkApp = createConnectedMockZMKApp({
+        subsystems: ["cormoran_rip"],
+      });
+      const call = jest.fn().mockResolvedValue({});
+      const { useCustomSubsystem } =
+        await import("@cormoran/zmk-studio-react-hook");
+
+      // This models useZMKApp.findSubsystem(), which returns a fresh object
+      // despite representing the same subsystem index.
+      (useCustomSubsystem as jest.Mock).mockImplementation(() => ({
+        ready: true,
+        subsystem: { index: 0, identifier: "cormoran_rip" },
+        call,
+      }));
+
+      render(
+        <ZMKAppProvider value={zmkApp}>
+          <InputProcessorManager />
+        </ZMKAppProvider>
+      );
+
+      await waitFor(() => expect(call).toHaveBeenCalledTimes(2));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(call).toHaveBeenCalledTimes(2);
     });
   });
 });

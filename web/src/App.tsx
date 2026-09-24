@@ -34,6 +34,14 @@ export const GITHUB_REPO = "cormoran/zmk-module-runtime-input-processor";
 // regardless of GITHUB_REPO above.
 export const TEMPLATE_CREDIT_REPO = "cormoran/zmk-module-template";
 
+// Keep the codec identity stable. `useCustomSubsystem` memoizes its RPC call
+// around this value, so recreating it during every render makes downstream
+// callbacks change even while the device connection is unchanged.
+const RIP_CODEC = {
+  encode: (request: Request) => Request.encode(request).finish(),
+  decode: Response.decode,
+};
+
 function App() {
   return (
     <div className="app">
@@ -206,10 +214,14 @@ export function InputProcessorManager() {
     WriteMode.WRITE_MODE_PERSIST
   );
 
-  const { ready, subsystem, call } = useCustomSubsystem(SUBSYSTEM_IDENTIFIER, {
-    encode: (r: Request) => Request.encode(r).finish(),
-    decode: Response.decode,
-  });
+  const { ready, subsystem, call } = useCustomSubsystem(
+    SUBSYSTEM_IDENTIFIER,
+    RIP_CODEC
+  );
+  // `findSubsystem()` returns a new object on each render. Effects must use
+  // its stable identity instead, otherwise their own state updates trigger
+  // another initial load indefinitely.
+  const subsystemIndex = subsystem?.index ?? null;
   const { locked } = useStudioLockState();
 
   // Studio's unlock requirement is per-request: when a mutating/reading call
@@ -681,12 +693,11 @@ export function InputProcessorManager() {
   );
 
   useEffect(() => {
-    if (subsystem) {
-      loadProcessors();
-      loadLayerInfo();
+    if (subsystemIndex !== null) {
+      void loadProcessors();
+      void loadLayerInfo();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subsystem]);
+  }, [subsystemIndex, loadProcessors, loadLayerInfo]);
 
   // Auto-retry once the device reports it's unlocked again -- covers the
   // common case where the user presses &studio_unlock after seeing the
@@ -702,11 +713,11 @@ export function InputProcessorManager() {
 
   // Subscribe to notifications for processor changes
   useEffect(() => {
-    if (!zmkApp || !subsystem) return;
+    if (!zmkApp || subsystemIndex === null) return;
 
     const unsubscribe = zmkApp.onNotification({
       type: "custom",
-      subsystemIndex: subsystem.index,
+      subsystemIndex,
       callback: (notification) => {
         try {
           // notification.payload contains the encoded Notification message
@@ -781,7 +792,7 @@ export function InputProcessorManager() {
     });
 
     return unsubscribe;
-  }, [zmkApp, subsystem, selectedProcessorId, isUpdating]);
+  }, [zmkApp, subsystemIndex, selectedProcessorId, isUpdating]);
 
   if (!zmkApp) return null;
 
