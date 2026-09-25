@@ -53,6 +53,7 @@ message InputProcessorInfo {
     uint32 inertia_fast_threshold = 26;
     uint32 inertia_fast_output_percent = 27;
     bool inertia_enabled = 28;
+    uint32 inertia_normal_max_output = 29; // 0 means unlimited; fast stage ignores it
 }
 
 message ListInputProcessorsRequest {
@@ -288,6 +289,13 @@ message SetInertiaDecayResponse {
     // Empty - use notification to report changes
 }
 
+message SetInertiaNormalMaxOutputRequest {
+    uint32 id = 1;
+    uint32 max_output = 2; // 0 means unlimited
+    WriteMode write_mode = 3;
+}
+message SetInertiaNormalMaxOutputResponse {}
+
 message SetInertiaFastThresholdRequest {
     uint32 id = 1;
     uint32 threshold = 2;
@@ -371,6 +379,7 @@ message Request {
         SetInertiaFastThresholdRequest set_inertia_fast_threshold = 30;
         SetInertiaFastOutputPercentRequest set_inertia_fast_output_percent = 31;
         SetInertiaEnabledRequest set_inertia_enabled = 32;
+        SetInertiaNormalMaxOutputRequest set_inertia_normal_max_output = 33;
     }
 }
 
@@ -410,6 +419,7 @@ message Response {
         SetInertiaFastThresholdResponse set_inertia_fast_threshold = 31;
         SetInertiaFastOutputPercentResponse set_inertia_fast_output_percent = 32;
         SetInertiaEnabledResponse set_inertia_enabled = 33;
+        SetInertiaNormalMaxOutputResponse set_inertia_normal_max_output = 34;
     }
 }
 

@@ -168,6 +168,14 @@ properties:
       speed, producing an exponential tail. Zero holds speed and 100 stops
       output after one further interval.
 
+  inertia-normal-max-output:
+    type: int
+    default: 0
+    description: |
+      Maximum synthetic output per interval in the normal inertia stage,
+      after scaling. Zero leaves normal output unlimited. The limit does not
+      apply once the fast stage starts.
+
   inertia-fast-threshold:
     type: int
     default: 20

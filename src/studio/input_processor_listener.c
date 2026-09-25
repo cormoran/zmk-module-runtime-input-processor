@@ -92,6 +92,7 @@ static int input_processor_state_changed_listener(const zmk_event_t *eh) {
     info->inertia_threshold = ev->config.inertia_threshold;
     info->inertia_window_ms = ev->config.inertia_window_ms;
     info->inertia_decay_percent = ev->config.inertia_decay_percent;
+    info->inertia_normal_max_output = ev->config.inertia_normal_max_output;
     info->inertia_fast_threshold = ev->config.inertia_fast_threshold;
     info->inertia_fast_output_percent = ev->config.inertia_fast_output_percent;
     info->inertia_enabled = ev->config.inertia_enabled;

@@ -44,6 +44,7 @@ it("turns inertia on and off while retaining the processor's threshold", async (
     inertiaThreshold: 12,
     inertiaEnabled: false,
     inertiaDecayPercent: 8,
+    inertiaNormalMaxOutput: 0,
     inertiaFastThreshold: 0,
     inertiaFastOutputPercent: 200,
   });
@@ -88,6 +89,12 @@ it("turns inertia on and off while retaining the processor's threshold", async (
   const fastOutput = screen.getByRole("spinbutton", {
     name: "Fast Output (%):",
   });
+  const normalLimit = screen.getByRole("spinbutton", {
+    name: "Normal Output Limit (per interval):",
+  });
+  expect(normalLimit).toHaveValue(0);
+  await user.clear(normalLimit);
+  await user.type(normalLimit, "3");
   await user.clear(fastThreshold);
   await user.type(fastThreshold, "30");
   await user.clear(fastOutput);
@@ -106,6 +113,13 @@ it("turns inertia on and off while retaining the processor's threshold", async (
   await user.click(screen.getByRole("button", { name: /Apply Settings/i }));
   await waitFor(() => expect(appliedThresholds()).toEqual([17]));
   await waitFor(() => expect(appliedEnabled()).toEqual([true]));
+  await waitFor(() =>
+    expect(
+      encode.mock.calls.some(
+        ([request]) => request.setInertiaNormalMaxOutput?.maxOutput === 3
+      )
+    ).toBe(true)
+  );
   await waitFor(() =>
     expect(
       encode.mock.calls.some(

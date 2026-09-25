@@ -211,7 +211,7 @@ export function InputProcessorManager() {
   // Axis invert state
   const [xInvert, setXInvert] = useState<boolean>(false);
   const [yInvert, setYInvert] = useState<boolean>(false);
-  // Inertia state. A zero threshold disables the feature.
+  // Inertia settings.
   const [inertiaWindowMs, setInertiaWindowMs] = useState<number>(200);
   const [inertiaIntervalMs, setInertiaIntervalMs] = useState<number>(20);
   const [inertiaEnabled, setInertiaEnabled] = useState<boolean>(true);
@@ -219,6 +219,8 @@ export function InputProcessorManager() {
     String(DEFAULT_INERTIA_THRESHOLD)
   );
   const [inertiaDecayPercent, setInertiaDecayPercent] = useState<number>(8);
+  const [inertiaNormalMaxOutput, setInertiaNormalMaxOutput] =
+    useState<number>(0);
   const [inertiaFastThreshold, setInertiaFastThreshold] = useState<number>(0);
   const [inertiaFastOutputPercent, setInertiaFastOutputPercent] =
     useState<string>("200");
@@ -722,6 +724,29 @@ export function InputProcessorManager() {
         }
       }
 
+      if (currentProcessor.inertiaNormalMaxOutput !== inertiaNormalMaxOutput) {
+        const response = await callRPC(
+          Request.create({
+            setInertiaNormalMaxOutput: {
+              id: selectedProcessorId,
+              writeMode,
+              maxOutput: inertiaNormalMaxOutput,
+            },
+          })
+        );
+        if (response?.error) {
+          setError(response.error.message);
+          return;
+        }
+        setProcessors((previous) =>
+          previous.map((proc) =>
+            proc.id === selectedProcessorId
+              ? { ...proc, inertiaNormalMaxOutput }
+              : proc
+          )
+        );
+      }
+
       if (currentProcessor.inertiaFastThreshold !== inertiaFastThreshold) {
         const response = await callRPC(
           Request.create({
@@ -800,6 +825,7 @@ export function InputProcessorManager() {
     inertiaEnabled,
     inertiaThreshold,
     inertiaDecayPercent,
+    inertiaNormalMaxOutput,
     inertiaFastThreshold,
     inertiaFastOutputPercent,
     writeMode,
@@ -867,6 +893,7 @@ export function InputProcessorManager() {
         setInertiaIntervalMs(proc.inertiaIntervalMs);
         loadInertiaThreshold(proc);
         setInertiaDecayPercent(proc.inertiaDecayPercent);
+        setInertiaNormalMaxOutput(proc.inertiaNormalMaxOutput);
         setInertiaFastThreshold(proc.inertiaFastThreshold);
         setInertiaFastOutputPercent(
           String(proc.inertiaFastOutputPercent || 200)
@@ -963,6 +990,7 @@ export function InputProcessorManager() {
               setInertiaIntervalMs(proc.inertiaIntervalMs);
               loadInertiaThreshold(proc);
               setInertiaDecayPercent(proc.inertiaDecayPercent);
+              setInertiaNormalMaxOutput(proc.inertiaNormalMaxOutput);
               setInertiaFastThreshold(proc.inertiaFastThreshold);
               setInertiaFastOutputPercent(
                 String(proc.inertiaFastOutputPercent || 200)
@@ -994,6 +1022,7 @@ export function InputProcessorManager() {
               setInertiaIntervalMs(proc.inertiaIntervalMs);
               loadInertiaThreshold(proc);
               setInertiaDecayPercent(proc.inertiaDecayPercent);
+              setInertiaNormalMaxOutput(proc.inertiaNormalMaxOutput);
               setInertiaFastThreshold(proc.inertiaFastThreshold);
               setInertiaFastOutputPercent(
                 String(proc.inertiaFastOutputPercent || 200)
@@ -1738,6 +1767,38 @@ export function InputProcessorManager() {
               Percentage removed from the remaining speed after each output
               interval without new input, producing exponential decay. 0 keeps
               the speed; 100 stops after one more interval.
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="inertia-normal-max-output">
+              Normal Output Limit (per interval):
+            </label>
+            <input
+              id="inertia-normal-max-output"
+              type="number"
+              min="0"
+              max="32767"
+              step="1"
+              value={inertiaNormalMaxOutput}
+              onChange={(e) =>
+                setInertiaNormalMaxOutput(
+                  Math.min(
+                    32767,
+                    Math.max(0, parseInt(e.target.value, 10) || 0)
+                  )
+                )
+              }
+            />
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              Caps each generated output in normal inertia. Zero is unlimited.
+              Fast mode ignores this limit.
             </div>
           </div>
 

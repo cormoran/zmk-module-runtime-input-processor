@@ -61,6 +61,7 @@ struct zmk_input_processor_runtime_config {
     uint16_t inertia_interval_ms;
     uint16_t inertia_threshold;
     uint8_t inertia_decay_percent;
+    uint16_t inertia_normal_max_output;
     uint16_t inertia_fast_threshold;
     uint16_t inertia_fast_output_percent;
     bool inertia_notifications_enabled;
@@ -431,12 +432,20 @@ int zmk_input_processor_runtime_set_inertia_decay(
     const struct device *dev, uint8_t decay_percent,
     enum zmk_input_processor_runtime_write_mode mode);
 
+/** Set the normal-stage synthetic output limit (zero is unlimited). */
+int zmk_input_processor_runtime_set_inertia_normal_max_output(
+    const struct device *dev, uint16_t max_output,
+    enum zmk_input_processor_runtime_write_mode mode);
+
 /** Enable or disable inertia transition notifications in RAM only. */
 int zmk_input_processor_runtime_set_inertia_notifications(const struct device *dev, bool enabled);
 
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_TEST)
 /** @brief Test-only: apply a v1 blob from main. */
 int zmk_input_processor_runtime_test_apply_legacy_v1(const struct device *dev);
+
+/** @brief Test-only: apply a v2 blob without the normal-stage output limit. */
+int zmk_input_processor_runtime_test_apply_legacy_v2(const struct device *dev);
 
 /** @brief Test-only: verify timed report splitting and rolling expiration. */
 int zmk_input_processor_runtime_test_inertia_sliding_window(void);

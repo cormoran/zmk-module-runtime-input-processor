@@ -197,6 +197,8 @@ and the setters take a `zmk_input_processor_runtime_write_mode`
     after scaling within `inertia-window-ms`
   - `inertia-window-ms` (default `200`) controls input measurement, while
     `inertia-interval-ms` (default `20`) controls output cadence
+  - `inertia-normal-max-output` (default `0`, unlimited) caps each generated
+    output after scaling in the normal stage. Fast mode ignores this cap.
   - `inertia-fast-threshold` (default `20`) is a second threshold in
     scaled input counts over the same window. Crossing it enables fast output
     for the rest of that inertia run.

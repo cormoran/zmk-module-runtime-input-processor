@@ -651,11 +651,15 @@ static int test_inertia(void) {
              dev, 20, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY)) < 0 ||
         (ret = zmk_input_processor_runtime_set_inertia_fast_output_percent(
              dev, 200, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY)) < 0 ||
+        (ret = zmk_input_processor_runtime_set_inertia_normal_max_output(
+             dev, 1, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY)) < 0 ||
+        zmk_input_processor_runtime_set_inertia_normal_max_output(
+            dev, 32768, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) != -EINVAL ||
         zmk_input_processor_runtime_set_inertia_fast_output_percent(
             dev, 99, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) != -EINVAL ||
         (ret = process_test_relative_x(dev, 11, &output)) < 0 ||
         (ret = zmk_input_processor_runtime_test_inertia_tick(dev, &inertia_output)) < 0 ||
-        inertia_output != 2 || last_inertia_fast_input ||
+        inertia_output != 1 || last_inertia_fast_input ||
         inertia_fast_input_transitions != fast_transitions_before + 1 ||
         (ret = process_test_relative_x(dev, 10, &output)) < 0 ||
         (ret = zmk_input_processor_runtime_test_inertia_tick(dev, &inertia_output)) < 0 ||
@@ -663,6 +667,11 @@ static int test_inertia(void) {
         inertia_fast_input_transitions != fast_transitions_before + 2) {
         LOG_ERR("Fast inertia stage failed: output=%d", inertia_output);
         return ret < 0 ? ret : -EINVAL;
+    }
+    ret = zmk_input_processor_runtime_set_inertia_normal_max_output(
+        dev, 0, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY);
+    if (ret < 0) {
+        return ret;
     }
     if ((ret = zmk_input_processor_runtime_set_scaling(
              dev, 2, 1, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY)) < 0 ||
@@ -779,6 +788,7 @@ static int test_write_modes_and_save_discard(void) {
     // The tuned inertia defaults must survive unrelated writes.
     if (cfg.inertia_window_ms != 200 || cfg.inertia_interval_ms != 20 ||
         cfg.inertia_threshold != 12 || cfg.inertia_decay_percent != 8 ||
+        cfg.inertia_normal_max_output != 0 ||
         !cfg.inertia_enabled || cfg.inertia_fast_threshold != 0 ||
         cfg.inertia_fast_output_percent != 200 ||
         cfg.inertia_notifications_enabled) {
@@ -804,6 +814,11 @@ static int test_write_modes_and_save_discard(void) {
     }
     ret = zmk_input_processor_runtime_set_inertia_decay(
         dev, 7, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_PERSIST);
+    if (ret < 0) {
+        return ret;
+    }
+    ret = zmk_input_processor_runtime_set_inertia_normal_max_output(
+        dev, 9, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_PERSIST);
     if (ret < 0) {
         return ret;
     }
@@ -835,6 +850,11 @@ static int test_write_modes_and_save_discard(void) {
     if (ret < 0) {
         return ret;
     }
+    ret = zmk_input_processor_runtime_set_inertia_normal_max_output(
+        dev, 3, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_MEMORY);
+    if (ret < 0) {
+        return ret;
+    }
     if ((ret = zmk_input_processor_runtime_set_inertia_fast_threshold(
              dev, 60, ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_MEMORY)) < 0 ||
         (ret = zmk_input_processor_runtime_set_inertia_fast_output_percent(
@@ -852,6 +872,7 @@ static int test_write_modes_and_save_discard(void) {
     zmk_input_processor_runtime_get_config(dev, NULL, &cfg);
     if (cfg.inertia_window_ms != 250 || cfg.inertia_interval_ms != 25 ||
         cfg.inertia_threshold != 23 || cfg.inertia_decay_percent != 7 ||
+        cfg.inertia_normal_max_output != 9 ||
         cfg.inertia_fast_threshold != 48 || cfg.inertia_fast_output_percent != 250 ||
         !cfg.inertia_notifications_enabled) {
         LOG_ERR("Inertia discard did not restore flash value: window=%u interval=%u "
@@ -868,9 +889,19 @@ static int test_write_modes_and_save_discard(void) {
     zmk_input_processor_runtime_get_config(dev, NULL, &cfg);
     if (cfg.rotation_degrees != 42 || cfg.inertia_window_ms != 250 ||
         cfg.inertia_interval_ms != 25 || cfg.inertia_threshold != 23 ||
-        cfg.inertia_decay_percent != 7 || cfg.inertia_fast_threshold != 48 ||
+        cfg.inertia_decay_percent != 7 || cfg.inertia_normal_max_output != 9 ||
+        cfg.inertia_fast_threshold != 48 ||
         cfg.inertia_fast_output_percent != 250) {
         LOG_ERR("Legacy v1 settings were not migrated");
+        return -EINVAL;
+    }
+    ret = zmk_input_processor_runtime_test_apply_legacy_v2(dev);
+    if (ret < 0) {
+        return ret;
+    }
+    zmk_input_processor_runtime_get_config(dev, NULL, &cfg);
+    if (cfg.rotation_degrees != 43 || cfg.inertia_normal_max_output != 9) {
+        LOG_ERR("Legacy v2 settings were not migrated");
         return -EINVAL;
     }
     ret = zmk_input_processor_runtime_set_inertia_enabled(
@@ -889,7 +920,7 @@ static int test_write_modes_and_save_discard(void) {
         LOG_ERR("Inertia enabled flag did not persist independently of threshold");
         return -EINVAL;
     }
-    LOG_INF("PASS: rip_settings_write_modes rot=%d legacy_v1=ok", cfg.rotation_degrees);
+    LOG_INF("PASS: rip_settings_write_modes rot=%d legacy_v1_v2=ok", cfg.rotation_degrees);
     return 0;
 }
 

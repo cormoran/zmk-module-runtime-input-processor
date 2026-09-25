@@ -71,6 +71,7 @@ struct runtime_processor_config {
     uint16_t initial_inertia_interval_ms;
     uint16_t initial_inertia_threshold;
     uint32_t initial_inertia_decay_percent;
+    uint16_t initial_inertia_normal_max_output;
     uint16_t initial_inertia_fast_threshold;
     uint16_t initial_inertia_fast_output_percent;
 };
@@ -175,6 +176,7 @@ struct runtime_processor_data {
     uint16_t inertia_interval_ms;
     uint16_t inertia_threshold;
     uint8_t inertia_decay_percent;
+    uint16_t inertia_normal_max_output;
     uint16_t inertia_fast_threshold;
     uint16_t inertia_fast_output_percent;
     bool inertia_notifications_enabled;
@@ -183,6 +185,7 @@ struct runtime_processor_data {
     uint16_t persistent_inertia_interval_ms;
     uint16_t persistent_inertia_threshold;
     uint8_t persistent_inertia_decay_percent;
+    uint16_t persistent_inertia_normal_max_output;
     uint16_t persistent_inertia_fast_threshold;
     uint16_t persistent_inertia_fast_output_percent;
 
@@ -491,6 +494,9 @@ static int16_t inertia_finish_interval(struct runtime_processor_data *data) {
     uint64_t scaled_amount = scaled_numerator / divisor;
     data->inertia_scale_remainder = scaled_numerator % divisor;
     scaled_amount = MIN(scaled_amount, (uint64_t)INT16_MAX);
+    if (!data->inertia_fast_active && data->inertia_normal_max_output > 0) {
+        scaled_amount = MIN(scaled_amount, (uint64_t)data->inertia_normal_max_output);
+    }
     if (data->inertia_fast_active) {
         uint64_t fast_numerator = scaled_amount * data->inertia_fast_output_percent +
                                   data->inertia_fast_remainder;
@@ -962,7 +968,7 @@ static struct zmk_input_processor_driver_api runtime_processor_driver_api = {
  * see the load path below), so the generic surface is for visibility/inspection.
  */
 #define RIP_SETTINGS_SUBSYSTEM_ID "cormoran_rip"
-#define RIP_SETTINGS_BLOB_VERSION 2
+#define RIP_SETTINGS_BLOB_VERSION 3
 
 /*
  * The persisted-on-flash v1 struct for one processor's original 15 settings
@@ -995,7 +1001,7 @@ struct rip_persist_v1 {
     bool y_invert;
 };
 
-/* v2 is the only format introduced by this PR. v1 remains readable. */
+/* v2 remains readable for devices already flashed with the first PR revision. */
 struct rip_persist_v2 {
     struct rip_persist_v1 v1;
     bool inertia_enabled;
@@ -1007,7 +1013,12 @@ struct rip_persist_v2 {
     uint16_t inertia_fast_output_percent;
 };
 
-#define RIP_SETTINGS_BLOB_SIZE (1 + sizeof(struct rip_persist_v2))
+struct rip_persist_v3 {
+    struct rip_persist_v2 v2;
+    uint16_t inertia_normal_max_output;
+};
+
+#define RIP_SETTINGS_BLOB_SIZE (1 + sizeof(struct rip_persist_v3))
 
 BUILD_ASSERT(RIP_SETTINGS_BLOB_SIZE <= CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE,
              "runtime input processor settings blob exceeds "
@@ -1025,31 +1036,34 @@ BUILD_ASSERT(RIP_SETTINGS_BLOB_SIZE <= CONFIG_ZMK_CUSTOM_SETTINGS_VALUE_MAX_SIZE
  * and returns the number of bytes written. Version byte is written separately
  * from the struct memcpy so no wrapper-struct padding enters the layout. */
 static size_t pack_processor_settings(const struct runtime_processor_data *data, uint8_t *buf) {
-    struct rip_persist_v2 settings = {
-        .v1 = {
-            .scale_multiplier = data->persistent_scale_multiplier,
-            .scale_divisor = data->persistent_scale_divisor,
-            .rotation_degrees = data->persistent_rotation_degrees,
-            .temp_layer_enabled = data->persistent_temp_layer_enabled,
-            .temp_layer_layer = data->persistent_temp_layer_layer,
-            .temp_layer_activation_delay_ms = data->persistent_temp_layer_activation_delay_ms,
-            .temp_layer_deactivation_delay_ms = data->persistent_temp_layer_deactivation_delay_ms,
-            .active_layers = data->persistent_active_layers,
-            .axis_snap_mode = data->persistent_axis_snap_mode,
-            .axis_snap_threshold = data->persistent_axis_snap_threshold,
-            .axis_snap_timeout_ms = data->persistent_axis_snap_timeout_ms,
-            .xy_to_scroll_enabled = data->persistent_xy_to_scroll_enabled,
-            .xy_swap_enabled = data->persistent_xy_swap_enabled,
-            .x_invert = data->persistent_x_invert,
-            .y_invert = data->persistent_y_invert,
+    struct rip_persist_v3 settings = {
+        .v2 = {
+            .v1 = {
+                .scale_multiplier = data->persistent_scale_multiplier,
+                .scale_divisor = data->persistent_scale_divisor,
+                .rotation_degrees = data->persistent_rotation_degrees,
+                .temp_layer_enabled = data->persistent_temp_layer_enabled,
+                .temp_layer_layer = data->persistent_temp_layer_layer,
+                .temp_layer_activation_delay_ms = data->persistent_temp_layer_activation_delay_ms,
+                .temp_layer_deactivation_delay_ms = data->persistent_temp_layer_deactivation_delay_ms,
+                .active_layers = data->persistent_active_layers,
+                .axis_snap_mode = data->persistent_axis_snap_mode,
+                .axis_snap_threshold = data->persistent_axis_snap_threshold,
+                .axis_snap_timeout_ms = data->persistent_axis_snap_timeout_ms,
+                .xy_to_scroll_enabled = data->persistent_xy_to_scroll_enabled,
+                .xy_swap_enabled = data->persistent_xy_swap_enabled,
+                .x_invert = data->persistent_x_invert,
+                .y_invert = data->persistent_y_invert,
+            },
+            .inertia_enabled = data->persistent_inertia_enabled,
+            .inertia_window_ms = data->persistent_inertia_window_ms,
+            .inertia_interval_ms = data->persistent_inertia_interval_ms,
+            .inertia_threshold = data->persistent_inertia_threshold,
+            .inertia_decay_percent = data->persistent_inertia_decay_percent,
+            .inertia_fast_threshold = data->persistent_inertia_fast_threshold,
+            .inertia_fast_output_percent = data->persistent_inertia_fast_output_percent,
         },
-        .inertia_enabled = data->persistent_inertia_enabled,
-        .inertia_window_ms = data->persistent_inertia_window_ms,
-        .inertia_interval_ms = data->persistent_inertia_interval_ms,
-        .inertia_threshold = data->persistent_inertia_threshold,
-        .inertia_decay_percent = data->persistent_inertia_decay_percent,
-        .inertia_fast_threshold = data->persistent_inertia_fast_threshold,
-        .inertia_fast_output_percent = data->persistent_inertia_fast_output_percent,
+        .inertia_normal_max_output = data->persistent_inertia_normal_max_output,
     };
     buf[0] = RIP_SETTINGS_BLOB_VERSION;
     memcpy(&buf[1], &settings, sizeof(settings));
@@ -1060,6 +1074,7 @@ static size_t pack_processor_settings(const struct runtime_processor_data *data,
 static int unpack_and_apply_processor_settings(struct runtime_processor_data *data,
                                                const uint8_t *buf, size_t len) {
     struct rip_persist_v2 settings = {0};
+    uint16_t normal_max_output = data->persistent_inertia_normal_max_output;
     if (len == 1 + sizeof(struct rip_persist_v1) && buf[0] == 1) {
         memcpy(&settings.v1, &buf[1], sizeof(settings.v1));
         settings.inertia_enabled = data->persistent_inertia_enabled;
@@ -1069,17 +1084,24 @@ static int unpack_and_apply_processor_settings(struct runtime_processor_data *da
         settings.inertia_decay_percent = data->persistent_inertia_decay_percent;
         settings.inertia_fast_threshold = data->persistent_inertia_fast_threshold;
         settings.inertia_fast_output_percent = data->persistent_inertia_fast_output_percent;
-    } else if (len == RIP_SETTINGS_BLOB_SIZE && buf[0] == RIP_SETTINGS_BLOB_VERSION) {
+    } else if (len == 1 + sizeof(settings) && buf[0] == 2) {
         memcpy(&settings, &buf[1], sizeof(settings));
+    } else if (len == RIP_SETTINGS_BLOB_SIZE && buf[0] == RIP_SETTINGS_BLOB_VERSION) {
+        struct rip_persist_v3 saved;
+        memcpy(&saved, &buf[1], sizeof(saved));
+        settings = saved.v2;
+        normal_max_output = saved.inertia_normal_max_output;
+    } else {
+        return -EINVAL;
+    }
+    if (buf[0] != 1) {
         if (settings.inertia_window_ms == 0 || settings.inertia_window_ms > 60000 ||
             settings.inertia_interval_ms == 0 || settings.inertia_interval_ms > 60000 ||
             settings.inertia_threshold == 0 || settings.inertia_decay_percent > 100 ||
             settings.inertia_fast_output_percent < 100 ||
-            settings.inertia_fast_output_percent > 1000) {
+            settings.inertia_fast_output_percent > 1000 || normal_max_output > INT16_MAX) {
             return -EINVAL;
         }
-    } else {
-        return -EINVAL;
     }
 
     const struct rip_persist_v1 *v1 = &settings.v1;
@@ -1110,6 +1132,8 @@ static int unpack_and_apply_processor_settings(struct runtime_processor_data *da
         settings.inertia_fast_threshold;
     data->persistent_inertia_fast_output_percent = data->inertia_fast_output_percent =
         settings.inertia_fast_output_percent;
+    data->persistent_inertia_normal_max_output = data->inertia_normal_max_output =
+        normal_max_output;
     inertia_stop(data, ZMK_INPUT_PROCESSOR_INERTIA_STOP_REASON_SETTINGS_CHANGED);
     update_rotation_values(data);
     return 0;
@@ -1128,6 +1152,21 @@ int zmk_input_processor_runtime_test_apply_legacy_v1(const struct device *dev) {
     settings.v1.rotation_degrees = 42;
     uint8_t blob[1 + sizeof(settings.v1)] = {1};
     memcpy(&blob[1], &settings.v1, sizeof(settings.v1));
+    return unpack_and_apply_processor_settings(data, blob, sizeof(blob));
+}
+
+int zmk_input_processor_runtime_test_apply_legacy_v2(const struct device *dev) {
+    if (!dev) {
+        return -EINVAL;
+    }
+    struct runtime_processor_data *data = dev->data;
+    uint8_t current[RIP_SETTINGS_BLOB_SIZE];
+    pack_processor_settings(data, current);
+    struct rip_persist_v2 settings;
+    memcpy(&settings, &current[1], sizeof(settings));
+    settings.v1.rotation_degrees = 43;
+    uint8_t blob[1 + sizeof(settings)] = {2};
+    memcpy(&blob[1], &settings, sizeof(settings));
     return unpack_and_apply_processor_settings(data, blob, sizeof(blob));
 }
 #endif
@@ -1243,12 +1282,14 @@ static int runtime_processor_init(const struct device *dev) {
     data->inertia_interval_ms = cfg->initial_inertia_interval_ms;
     data->inertia_threshold = cfg->initial_inertia_threshold;
     data->inertia_decay_percent = MIN(cfg->initial_inertia_decay_percent, 100U);
+    data->inertia_normal_max_output = cfg->initial_inertia_normal_max_output;
     data->inertia_fast_threshold = cfg->initial_inertia_fast_threshold;
     data->inertia_fast_output_percent = cfg->initial_inertia_fast_output_percent;
     data->persistent_inertia_window_ms = cfg->initial_inertia_window_ms;
     data->persistent_inertia_interval_ms = cfg->initial_inertia_interval_ms;
     data->persistent_inertia_threshold = cfg->initial_inertia_threshold;
     data->persistent_inertia_decay_percent = data->inertia_decay_percent;
+    data->persistent_inertia_normal_max_output = data->inertia_normal_max_output;
     data->persistent_inertia_fast_threshold = data->inertia_fast_threshold;
     data->persistent_inertia_fast_output_percent = data->inertia_fast_output_percent;
     data->inertia_active = false;
@@ -1396,12 +1437,14 @@ static void load_processor_defaults(const struct device *dev) {
     data->inertia_interval_ms = cfg->initial_inertia_interval_ms;
     data->inertia_threshold = cfg->initial_inertia_threshold;
     data->inertia_decay_percent = MIN(cfg->initial_inertia_decay_percent, 100U);
+    data->inertia_normal_max_output = cfg->initial_inertia_normal_max_output;
     data->inertia_fast_threshold = cfg->initial_inertia_fast_threshold;
     data->inertia_fast_output_percent = cfg->initial_inertia_fast_output_percent;
     data->persistent_inertia_window_ms = cfg->initial_inertia_window_ms;
     data->persistent_inertia_interval_ms = cfg->initial_inertia_interval_ms;
     data->persistent_inertia_threshold = cfg->initial_inertia_threshold;
     data->persistent_inertia_decay_percent = data->inertia_decay_percent;
+    data->persistent_inertia_normal_max_output = data->inertia_normal_max_output;
     data->persistent_inertia_fast_threshold = data->inertia_fast_threshold;
     data->persistent_inertia_fast_output_percent = data->inertia_fast_output_percent;
     inertia_stop(data, ZMK_INPUT_PROCESSOR_INERTIA_STOP_REASON_SETTINGS_CHANGED);
@@ -1510,6 +1553,7 @@ void zmk_input_processor_runtime_restore_persistent(const struct device *dev) {
     data->inertia_interval_ms = data->persistent_inertia_interval_ms;
     data->inertia_threshold = data->persistent_inertia_threshold;
     data->inertia_decay_percent = data->persistent_inertia_decay_percent;
+    data->inertia_normal_max_output = data->persistent_inertia_normal_max_output;
     data->inertia_fast_threshold = data->persistent_inertia_fast_threshold;
     data->inertia_fast_output_percent = data->persistent_inertia_fast_output_percent;
     inertia_stop(data, ZMK_INPUT_PROCESSOR_INERTIA_STOP_REASON_SETTINGS_CHANGED);
@@ -1551,6 +1595,7 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         config->inertia_interval_ms = data->persistent_inertia_interval_ms;
         config->inertia_threshold = data->persistent_inertia_threshold;
         config->inertia_decay_percent = data->persistent_inertia_decay_percent;
+        config->inertia_normal_max_output = data->persistent_inertia_normal_max_output;
         config->inertia_fast_threshold = data->persistent_inertia_fast_threshold;
         config->inertia_fast_output_percent = data->persistent_inertia_fast_output_percent;
         config->inertia_notifications_enabled = data->inertia_notifications_enabled;
@@ -1565,6 +1610,8 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
     static const uint16_t runtime_y_codes_##n[] = DT_INST_PROP(n, y_codes);                        \
     BUILD_ASSERT(ARRAY_SIZE(runtime_x_codes_##n) == ARRAY_SIZE(runtime_y_codes_##n),               \
                  "X and Y codes need to be the same size");                                        \
+    BUILD_ASSERT(DT_INST_PROP_OR(n, inertia_normal_max_output, 0) <= INT16_MAX,                  \
+                 "normal inertia output limit exceeds signed report range");                    \
     COND_CODE_1(DT_INST_NODE_HAS_PROP(n, temp_layer_keep_keycodes),                                \
                 (static const uint16_t runtime_temp_layer_keep_keycodes_##n[] =                    \
                      DT_INST_PROP(n, temp_layer_keep_keycodes);),                                  \
@@ -1617,6 +1664,7 @@ int zmk_input_processor_runtime_get_config(const struct device *dev, const char 
         .initial_inertia_threshold = DT_INST_PROP_OR(n, inertia_threshold, 12),              \
         .initial_inertia_decay_percent =                                                        \
             DT_INST_PROP_OR(n, inertia_decay_percent, 8),                                       \
+        .initial_inertia_normal_max_output = DT_INST_PROP_OR(n, inertia_normal_max_output, 0), \
         .initial_inertia_fast_threshold = DT_INST_PROP_OR(n, inertia_fast_threshold, 20),       \
         .initial_inertia_fast_output_percent =                                                 \
             DT_INST_PROP_OR(n, inertia_fast_output_percent, 200),                                       \
@@ -2393,6 +2441,21 @@ int zmk_input_processor_runtime_set_inertia_decay(
 
     LOG_INF("Inertia decay: %u%% per interval%s", decay_percent, write_mode_label(mode));
 
+    return commit_write(dev, mode);
+}
+
+int zmk_input_processor_runtime_set_inertia_normal_max_output(
+    const struct device *dev, uint16_t max_output,
+    enum zmk_input_processor_runtime_write_mode mode) {
+    if (!dev || max_output > INT16_MAX) {
+        return -EINVAL;
+    }
+    struct runtime_processor_data *data = dev->data;
+    data->inertia_normal_max_output = max_output;
+    if (mode != ZMK_INPUT_PROCESSOR_RUNTIME_WRITE_MODE_TEMPORARY) {
+        data->persistent_inertia_normal_max_output = max_output;
+    }
+    inertia_stop(data, ZMK_INPUT_PROCESSOR_INERTIA_STOP_REASON_SETTINGS_CHANGED);
     return commit_write(dev, mode);
 }
 
