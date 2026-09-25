@@ -9,6 +9,7 @@ This ZMK module provides runtime configurable input processors for pointing devi
 - **Scaling Support**: Configure speed multipliers (e.g., x2 faster, x0.5 slower)
 - **Rotation Support**: Apply rotation transformations in degrees (fully implemented with paired X/Y handling)
 - **Axis Reversing**: Invert X and/or Y axis independently to reverse input direction
+- **Inertia**: Continue input after a rapid, configurable directional movement
 - **Axis Snapping**: Lock scrolling to X or Y axis with threshold-based unlock
 - **Temp-Layer Layer**: Automatically activate a layer when using pointing device, deactivate on key press or timeout
 - **Active Layers**: Specify which layers the processor should be active on using a bitmask
@@ -189,6 +190,42 @@ and the setters take a `zmk_input_processor_runtime_write_mode`
   - Values are applied as: `output = input * multiplier / divisor`
   - Remainders are tracked for precise scaling
 
+- **Inertia**: Starts continuous input after rapid same-direction movement
+  - `inertia-enabled` enables the feature per processor (off by default;
+    enable it on the scroll processor or in Studio)
+  - `inertia-threshold` (default `12`) is the accumulated amount required
+    after scaling within `inertia-window-ms`
+  - `inertia-window-ms` (default `200`) controls input measurement, while
+    `inertia-interval-ms` (default `20`) controls output cadence
+  - `inertia-fast-threshold` (default `20`) is a second threshold in
+    scaled input counts over the same window. Crossing it enables fast output
+    for the rest of that inertia run.
+  - `inertia-fast-output-percent` (default `200`) multiplies synthetic output
+    after normal scale in fast mode. `200` means twice the normal output.
+  - The movement that triggers entry sets the initial speed. Each interval
+    emits the retained sliding-window total scaled as
+    `retained_raw_amount * interval_ms / window_ms`, then applies normal scale
+    and any fast output percentage. Fractional output carries into later
+    intervals so slow speeds still move
+  - Reverse movement totaling `clamp(threshold / 2, reverse_min, reverse_max)`
+    within one measurement window exits inertia; isolated reverse counts are
+    ignored. `reverse_min` and `reverse_max` default to `3` and `12` in Kconfig
+  - `inertia-decay-percent` (default `8`) multiplies the retained speed by
+    `(100 - decay) / 100` after each output interval without new input. This
+    gives an exponential tail; `0` holds speed and `100` stops after one more
+    interval
+  - Reports are distributed over elapsed time in Q16 rolling buckets. Inertia
+    ends when its remaining tail cannot produce another scaled output count.
+  - The Studio Web tuning area repeats in both directions and can lock either
+    axis. Its optional activity display enables memory-only Studio RPC
+    notifications for this processor, defaults to off, and changes the area
+    background while inertia is active.
+  - Kconfig controls rolling bucket count, window slices, and reverse exit
+    bounds. See
+    `Kconfig` for the complete `ZMK_RUNTIME_INPUT_PROCESSOR_INERTIA_*` options.
+  - Speed is stored with fractional precision, so the exponential tail keeps
+    its shape at low speeds
+
 ### Example Configurations
 
 **2x Speed:**
@@ -305,7 +342,7 @@ When holding the keep-active behavior key, the temp-layer layer will not deactiv
 
 ### Active Layers
 
-The active layers feature allows you to specify which layers the input processor should be active on. This is useful when you want the processor to only apply transformations (scaling, rotation) on specific layers.
+The active layers feature allows you to specify which layers the input processor should be active on. This is useful when you want the processor to only apply transformations (scaling, rotation) on specific layers. Active inertia stops when none of the selected layers remains active.
 
 **Configuration via Device Tree:**
 
@@ -558,9 +595,8 @@ already built (see `tests/zmk-config/build.yaml`) using a reusable action,
 [`cormoran/zmk-workspace`'s
 `zmk-renode-test`](https://github.com/cormoran/zmk-workspace/tree/main/.github/actions/zmk-renode-test).
 **That action does not build firmware** -- this module's own build flow
-does, using the `renode-studio-uart` Zephyr snippet that `zmk-workspace`
-provides as a west dependency (see
-`west/west-dependency/west-test-dependency.yml`); the action only boots the
+does, using this module's `renode-studio-uart` Zephyr snippet (see
+`tests/zmk-config/build.yaml`); the action only boots the
 resulting ELF and runs tests against it.
 
 To reproduce locally (after the usual `west update`, which also fetches

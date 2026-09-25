@@ -6,6 +6,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setupZMKMocks } from "@cormoran/zmk-studio-react-hook/testing";
 import App from "../src/App";
+import { Request } from "../src/proto/cormoran/rip/custom";
 
 // Mock the ZMK client, but keep real exports (e.g. `MetaError`) that
 // @cormoran/zmk-studio-react-hook's useStudioLockState relies on for
@@ -60,6 +61,7 @@ function setTransportSupport({
 describe("App Component", () => {
   afterEach(() => {
     setTransportSupport({ serial: false, bluetooth: false });
+    jest.restoreAllMocks();
   });
 
   describe("Basic Rendering", () => {
@@ -157,6 +159,13 @@ describe("App Component", () => {
         deviceName: "Test Keyboard",
         subsystems: ["cormoran_rip"],
       });
+      // jsdom lacks the Web TextEncoder used by the generated protobuf code.
+      // The request payload itself is outside this component test; provide a
+      // stable encoded value so the loader requests reach the RPC mock.
+      jest.spyOn(Request, "encode").mockReturnValue({
+        finish: () => new Uint8Array(),
+      } as ReturnType<typeof Request.encode>);
+      mocks.call_rpc.mockResolvedValue({ custom: { call: { payload: null } } });
 
       const { connectSerial } = await import("@cormoran/zmk-studio-react-hook");
       (connectSerial as jest.Mock).mockResolvedValue(mocks.mockTransport);
@@ -179,6 +188,17 @@ describe("App Component", () => {
           screen.getByRole("heading", { name: /Input Processors/i })
         ).toBeInTheDocument();
       });
+
+      // Three calls establish the Studio connection/lock state and two load
+      // this module's data. Keep the count stable after the resulting state
+      // updates: the subsystem object is recreated by the hook on every
+      // render, so using that object as an effect dependency would otherwise
+      // call the loaders forever.
+      await waitFor(() => {
+        expect(mocks.call_rpc).toHaveBeenCalledTimes(5);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(mocks.call_rpc).toHaveBeenCalledTimes(5);
     });
 
     it("should connect to device via Bluetooth when connect button is clicked", async () => {

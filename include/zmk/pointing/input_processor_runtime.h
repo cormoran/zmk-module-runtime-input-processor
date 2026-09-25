@@ -55,6 +55,16 @@ struct zmk_input_processor_runtime_config {
     // Axis reverse settings
     bool x_invert; // Whether to invert X axis
     bool y_invert; // Whether to invert Y axis
+    // Inertia settings.
+    bool inertia_enabled;
+    uint16_t inertia_window_ms;
+    uint16_t inertia_interval_ms;
+    uint16_t inertia_threshold;
+    uint8_t inertia_decay_percent;
+    uint16_t inertia_fast_threshold;
+    uint16_t inertia_fast_output_percent;
+    bool inertia_notifications_enabled;
+    bool inertia_active;
 };
 
 /**
@@ -349,7 +359,88 @@ int zmk_input_processor_runtime_set_x_invert(const struct device *dev, bool inve
 int zmk_input_processor_runtime_set_y_invert(const struct device *dev, bool invert,
                                              enum zmk_input_processor_runtime_write_mode mode);
 
+/**
+ * @brief Set inertia measurement-window duration.
+ *
+ * @param dev Pointer to the device structure
+ * @param window_ms Duration over which physical input is accumulated (must be > 0)
+ * @param mode Where to store the value (persist to flash, memory-only, or temporary)
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_inertia_window(
+    const struct device *dev, uint16_t window_ms,
+    enum zmk_input_processor_runtime_write_mode mode);
+
+/**
+ * @brief Set inertia output interval.
+ *
+ * @param dev Pointer to the device structure
+ * @param interval_ms Cadence for inertia output events (must be > 0)
+ * @param mode Where to store the value (persist to flash, memory-only, or temporary)
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_inertia_interval(
+    const struct device *dev, uint16_t interval_ms,
+    enum zmk_input_processor_runtime_write_mode mode);
+
+/**
+ * @brief Set inertia trigger threshold.
+ *
+ * A same-direction cumulative input
+ * amount reaching this threshold within the measurement window starts inertia.
+ * Opposite-direction input totaling max(3, min(threshold / 2, 12))
+ * within the window stops it.
+ *
+ * @param dev Pointer to the device structure
+ * @param threshold Input amount threshold (must be greater than zero)
+ * @param mode Where to store the value (persist to flash, memory-only, or temporary)
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_inertia_threshold(
+    const struct device *dev, uint16_t threshold,
+    enum zmk_input_processor_runtime_write_mode mode);
+
+/** Enable or disable inertia independently of its trigger threshold. */
+int zmk_input_processor_runtime_set_inertia_enabled(
+    const struct device *dev, bool enabled,
+    enum zmk_input_processor_runtime_write_mode mode);
+
+/** Set the second-stage post-scale input threshold (zero disables it). */
+int zmk_input_processor_runtime_set_inertia_fast_threshold(
+    const struct device *dev, uint16_t threshold,
+    enum zmk_input_processor_runtime_write_mode mode);
+
+/** Set the second-stage synthetic output percentage (100-1000). */
+int zmk_input_processor_runtime_set_inertia_fast_output_percent(
+    const struct device *dev, uint16_t percent,
+    enum zmk_input_processor_runtime_write_mode mode);
+
+/**
+ * @brief Set inertia decay per output interval.
+ *
+ * Without new physical input, this percentage of the retained inertia
+ * speed is removed after every output interval. Zero disables decay and 100
+ * stops output after one further interval.
+ *
+ * @param dev Pointer to the device structure
+ * @param decay_percent Amount to remove per output interval (0-100)
+ * @param mode Where to store the value (persist to flash, memory-only, or temporary)
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_input_processor_runtime_set_inertia_decay(
+    const struct device *dev, uint8_t decay_percent,
+    enum zmk_input_processor_runtime_write_mode mode);
+
+/** Enable or disable inertia transition notifications in RAM only. */
+int zmk_input_processor_runtime_set_inertia_notifications(const struct device *dev, bool enabled);
+
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_TEST)
+/** @brief Test-only: apply a v1 blob from main. */
+int zmk_input_processor_runtime_test_apply_legacy_v1(const struct device *dev);
+
+/** @brief Test-only: verify timed report splitting and rolling expiration. */
+int zmk_input_processor_runtime_test_inertia_sliding_window(void);
+
 /**
  * @brief Test-only: force a processor's pending debounced settings save to
  * run now, instead of waiting out CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE.
@@ -368,4 +459,17 @@ void zmk_input_processor_runtime_test_flush_save(const struct device *dev);
  * call this to verify the exact apply path the real boot work handler uses.
  */
 void zmk_input_processor_runtime_test_apply_persisted_settings(void);
+
+/**
+ * @brief Test-only: finish one inertia interval without scheduling an
+ * input event, returning the value that would be emitted.
+ */
+int zmk_input_processor_runtime_test_inertia_tick(const struct device *dev, int16_t *value);
+
+/** @brief Test-only: report whether the processor is in inertia mode. */
+bool zmk_input_processor_runtime_test_inertia_active(const struct device *dev);
+
+/** @brief Test-only: return the final input-event code inertia will emit. */
+int zmk_input_processor_runtime_test_inertia_output_code(const struct device *dev,
+                                                             uint16_t *code);
 #endif

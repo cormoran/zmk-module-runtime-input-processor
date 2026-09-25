@@ -31,6 +31,8 @@
 		x-codes = <INPUT_REL_X>;
 		y-codes = <INPUT_REL_Y>;
 		track-remainders;
+		inertia-enabled;
+		inertia-fast-threshold = <0>;
 
 		#input-processor-cells = <0>;
 	};
@@ -56,6 +58,10 @@
 			&rip_ldpi
 			&mmv MOVE_RIGHT
 			>;
+		};
+
+		inertia_test_layer {
+			bindings = <&trans &trans &trans &trans>;
 		};
 	};
 };

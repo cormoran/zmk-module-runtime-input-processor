@@ -4,6 +4,29 @@ config ZMK_RUNTIME_INPUT_PROCESSOR
 
 if ZMK_RUNTIME_INPUT_PROCESSOR
 
+config ZMK_RUNTIME_INPUT_PROCESSOR_INERTIA_WINDOW_SLICES
+    int "Number of time slices in an inertia measurement window"
+    range 4 254
+    default 64
+
+config ZMK_RUNTIME_INPUT_PROCESSOR_INERTIA_BUCKETS
+    int "Inertia rolling buffer bucket count"
+    range 6 256
+    default 66
+    help
+      Must be at least the window slice count plus two. Each processor keeps
+      five rolling buffers, so increasing this value uses more RAM.
+
+config ZMK_RUNTIME_INPUT_PROCESSOR_INERTIA_REVERSE_EXIT_MIN
+    int "Minimum reverse counts that stop inertia"
+    range 1 65535
+    default 3
+
+config ZMK_RUNTIME_INPUT_PROCESSOR_INERTIA_REVERSE_EXIT_MAX
+    int "Maximum reverse counts that stop inertia"
+    range 1 65535
+    default 12
+
 config ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC
     bool "Enable runtime input processor custom Studio RPC"
     depends on ZMK_STUDIO
@@ -18,5 +41,16 @@ config ZMK_RUNTIME_INPUT_PROCESSOR_TEST
       Compiles in zmk_input_processor_runtime_test_apply_persisted_settings(),
       which lets a test synchronously re-run the settings boot-apply logic
       instead of waiting on the real SYS_INIT delay. Not for production use.
+
+config ZMK_RENODE_STUDIO_UART_TRANSPORT
+    bool "Studio RPC UART transport for Renode emulation testing"
+    depends on ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC
+    select SERIAL
+    select RING_BUFFER
+    select UART_INTERRUPT_DRIVEN
+    help
+      Adds a Renode-only Studio RPC UART transport that is selected without
+      a USB or BLE endpoint. This is solely for the module's hardware-free
+      test build; do not enable it in firmware flashed to real hardware.
 
 endif

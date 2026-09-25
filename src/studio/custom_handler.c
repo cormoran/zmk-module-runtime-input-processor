@@ -89,6 +89,22 @@ static int handle_set_x_invert(const cormoran_rip_SetXInvertRequest *req,
                                cormoran_rip_Response *resp);
 static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
                                cormoran_rip_Response *resp);
+static int handle_set_inertia_interval(const cormoran_rip_SetInertiaIntervalRequest *req,
+                                          cormoran_rip_Response *resp);
+static int handle_set_inertia_window(const cormoran_rip_SetInertiaWindowRequest *req,
+                                        cormoran_rip_Response *resp);
+static int handle_set_inertia_threshold(const cormoran_rip_SetInertiaThresholdRequest *req,
+                                           cormoran_rip_Response *resp);
+static int handle_set_inertia_enabled(const cormoran_rip_SetInertiaEnabledRequest *req,
+                                     cormoran_rip_Response *resp);
+static int handle_set_inertia_decay(const cormoran_rip_SetInertiaDecayRequest *req,
+                                       cormoran_rip_Response *resp);
+static int handle_set_inertia_fast_threshold(
+    const cormoran_rip_SetInertiaFastThresholdRequest *req, cormoran_rip_Response *resp);
+static int handle_set_inertia_fast_output_percent(
+    const cormoran_rip_SetInertiaFastOutputPercentRequest *req, cormoran_rip_Response *resp);
+static int handle_set_inertia_notifications(
+    const cormoran_rip_SetInertiaNotificationsRequest *req, cormoran_rip_Response *resp);
 static int handle_save_all_settings(const cormoran_rip_SaveAllSettingsRequest *req,
                                     cormoran_rip_Response *resp);
 static int handle_discard_all_settings(const cormoran_rip_DiscardAllSettingsRequest *req,
@@ -187,6 +203,31 @@ static bool rip_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         break;
     case cormoran_rip_Request_reset_all_settings_tag:
         rc = handle_reset_all_settings(&req.request_type.reset_all_settings, resp);
+        break;
+    case cormoran_rip_Request_set_inertia_interval_tag:
+        rc = handle_set_inertia_interval(&req.request_type.set_inertia_interval, resp);
+        break;
+    case cormoran_rip_Request_set_inertia_threshold_tag:
+        rc = handle_set_inertia_threshold(&req.request_type.set_inertia_threshold, resp);
+        break;
+    case cormoran_rip_Request_set_inertia_enabled_tag:
+        rc = handle_set_inertia_enabled(&req.request_type.set_inertia_enabled, resp);
+        break;
+    case cormoran_rip_Request_set_inertia_window_tag:
+        rc = handle_set_inertia_window(&req.request_type.set_inertia_window, resp);
+        break;
+    case cormoran_rip_Request_set_inertia_decay_tag:
+        rc = handle_set_inertia_decay(&req.request_type.set_inertia_decay, resp);
+        break;
+    case cormoran_rip_Request_set_inertia_notifications_tag:
+        rc = handle_set_inertia_notifications(&req.request_type.set_inertia_notifications, resp);
+        break;
+    case cormoran_rip_Request_set_inertia_fast_threshold_tag:
+        rc = handle_set_inertia_fast_threshold(&req.request_type.set_inertia_fast_threshold, resp);
+        break;
+    case cormoran_rip_Request_set_inertia_fast_output_percent_tag:
+        rc = handle_set_inertia_fast_output_percent(
+            &req.request_type.set_inertia_fast_output_percent, resp);
         break;
     default:
         LOG_WRN("Unsupported rip request type: %d", req.which_request_type);
@@ -301,6 +342,15 @@ static int handle_get_input_processor(const cormoran_rip_GetInputProcessorReques
     result.processor.axis_snap_timeout_ms = config.axis_snap_timeout_ms;
     result.processor.x_invert = config.x_invert;
     result.processor.y_invert = config.y_invert;
+    result.processor.inertia_interval_ms = config.inertia_interval_ms;
+    result.processor.inertia_threshold = config.inertia_threshold;
+    result.processor.inertia_enabled = config.inertia_enabled;
+    result.processor.inertia_window_ms = config.inertia_window_ms;
+    result.processor.inertia_decay_percent = config.inertia_decay_percent;
+    result.processor.inertia_fast_threshold = config.inertia_fast_threshold;
+    result.processor.inertia_fast_output_percent = config.inertia_fast_output_percent;
+    result.processor.inertia_notifications_enabled = config.inertia_notifications_enabled;
+    result.processor.inertia_active = config.inertia_active;
 
     resp->which_response_type = cormoran_rip_Response_get_input_processor_tag;
     resp->response_type.get_input_processor = result;
@@ -729,6 +779,184 @@ static int handle_set_y_invert(const cormoran_rip_SetYInvertRequest *req,
     resp->response_type.set_y_invert =
         (cormoran_rip_SetYInvertResponse)cormoran_rip_SetYInvertResponse_init_zero;
 
+    return 0;
+}
+
+/** Handle setting inertia interval. */
+static int handle_set_inertia_interval(const cormoran_rip_SetInertiaIntervalRequest *req,
+                                          cormoran_rip_Response *resp) {
+    if (req->interval_ms == 0 || req->interval_ms > 60000U) {
+        return -EINVAL;
+    }
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    int ret = zmk_input_processor_runtime_set_inertia_interval(
+        dev, req->interval_ms, rip_write_mode(req->write_mode));
+    if (ret < 0) {
+        LOG_ERR("Failed to set inertia interval: %d", ret);
+        return ret;
+    }
+
+    resp->which_response_type = cormoran_rip_Response_set_inertia_interval_tag;
+    resp->response_type.set_inertia_interval =
+        (cormoran_rip_SetInertiaIntervalResponse)
+            cormoran_rip_SetInertiaIntervalResponse_init_zero;
+    return 0;
+}
+
+/** Handle setting inertia measurement window. */
+static int handle_set_inertia_window(const cormoran_rip_SetInertiaWindowRequest *req,
+                                        cormoran_rip_Response *resp) {
+    if (req->window_ms == 0 || req->window_ms > 60000U) {
+        return -EINVAL;
+    }
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    int ret = zmk_input_processor_runtime_set_inertia_window(
+        dev, req->window_ms, rip_write_mode(req->write_mode));
+    if (ret < 0) {
+        LOG_ERR("Failed to set inertia window: %d", ret);
+        return ret;
+    }
+
+    resp->which_response_type = cormoran_rip_Response_set_inertia_window_tag;
+    resp->response_type.set_inertia_window =
+        (cormoran_rip_SetInertiaWindowResponse)cormoran_rip_SetInertiaWindowResponse_init_zero;
+    return 0;
+}
+
+/** Handle setting inertia threshold. */
+static int handle_set_inertia_threshold(const cormoran_rip_SetInertiaThresholdRequest *req,
+                                           cormoran_rip_Response *resp) {
+    if (req->threshold == 0 || req->threshold > 65535U) {
+        LOG_WRN("Inertia threshold out of range: %u", req->threshold);
+        return -EINVAL;
+    }
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        LOG_WRN("Input processor not found: id=%d", req->id);
+        return -ENODEV;
+    }
+
+    int ret = zmk_input_processor_runtime_set_inertia_threshold(
+        dev, (uint16_t)req->threshold, rip_write_mode(req->write_mode));
+    if (ret < 0) {
+        LOG_ERR("Failed to set inertia threshold: %d", ret);
+        return ret;
+    }
+
+    resp->which_response_type = cormoran_rip_Response_set_inertia_threshold_tag;
+    resp->response_type.set_inertia_threshold =
+        (cormoran_rip_SetInertiaThresholdResponse)
+            cormoran_rip_SetInertiaThresholdResponse_init_zero;
+    return 0;
+}
+
+static int handle_set_inertia_enabled(const cormoran_rip_SetInertiaEnabledRequest *req,
+                                     cormoran_rip_Response *resp) {
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        return -ENODEV;
+    }
+    int ret = zmk_input_processor_runtime_set_inertia_enabled(
+        dev, req->enabled, rip_write_mode(req->write_mode));
+    if (ret < 0) {
+        return ret;
+    }
+    resp->which_response_type = cormoran_rip_Response_set_inertia_enabled_tag;
+    resp->response_type.set_inertia_enabled =
+        (cormoran_rip_SetInertiaEnabledResponse)cormoran_rip_SetInertiaEnabledResponse_init_zero;
+    return 0;
+}
+
+/** Handle setting inertia decay per output interval. */
+static int handle_set_inertia_decay(const cormoran_rip_SetInertiaDecayRequest *req,
+                                       cormoran_rip_Response *resp) {
+    if (req->decay_percent > 100U) {
+        LOG_WRN("Inertia decay out of range: %u", req->decay_percent);
+        return -EINVAL;
+    }
+
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        return -ENODEV;
+    }
+
+    int ret = zmk_input_processor_runtime_set_inertia_decay(
+        dev, (uint8_t)req->decay_percent, rip_write_mode(req->write_mode));
+    if (ret < 0) {
+        LOG_ERR("Failed to set inertia decay: %d", ret);
+        return ret;
+    }
+
+    resp->which_response_type = cormoran_rip_Response_set_inertia_decay_tag;
+    resp->response_type.set_inertia_decay =
+        (cormoran_rip_SetInertiaDecayResponse)cormoran_rip_SetInertiaDecayResponse_init_zero;
+    return 0;
+}
+
+static int handle_set_inertia_fast_threshold(
+    const cormoran_rip_SetInertiaFastThresholdRequest *req, cormoran_rip_Response *resp) {
+    if (req->threshold > UINT16_MAX) {
+        return -EINVAL;
+    }
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        return -ENODEV;
+    }
+    int ret = zmk_input_processor_runtime_set_inertia_fast_threshold(
+        dev, (uint16_t)req->threshold, rip_write_mode(req->write_mode));
+    if (ret < 0) {
+        return ret;
+    }
+    resp->which_response_type = cormoran_rip_Response_set_inertia_fast_threshold_tag;
+    resp->response_type.set_inertia_fast_threshold =
+        (cormoran_rip_SetInertiaFastThresholdResponse)
+            cormoran_rip_SetInertiaFastThresholdResponse_init_zero;
+    return 0;
+}
+
+static int handle_set_inertia_fast_output_percent(
+    const cormoran_rip_SetInertiaFastOutputPercentRequest *req, cormoran_rip_Response *resp) {
+    if (req->percent < 100 || req->percent > 1000) {
+        return -EINVAL;
+    }
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        return -ENODEV;
+    }
+    int ret = zmk_input_processor_runtime_set_inertia_fast_output_percent(
+        dev, (uint16_t)req->percent, rip_write_mode(req->write_mode));
+    if (ret < 0) {
+        return ret;
+    }
+    resp->which_response_type = cormoran_rip_Response_set_inertia_fast_output_percent_tag;
+    resp->response_type.set_inertia_fast_output_percent =
+        (cormoran_rip_SetInertiaFastOutputPercentResponse)
+            cormoran_rip_SetInertiaFastOutputPercentResponse_init_zero;
+    return 0;
+}
+
+static int handle_set_inertia_notifications(
+    const cormoran_rip_SetInertiaNotificationsRequest *req, cormoran_rip_Response *resp) {
+    const struct device *dev = zmk_input_processor_runtime_find_by_id(req->id);
+    if (!dev) {
+        return -ENODEV;
+    }
+    int ret = zmk_input_processor_runtime_set_inertia_notifications(dev, req->enabled);
+    if (ret < 0) {
+        return ret;
+    }
+    resp->which_response_type = cormoran_rip_Response_set_inertia_notifications_tag;
     return 0;
 }
 
