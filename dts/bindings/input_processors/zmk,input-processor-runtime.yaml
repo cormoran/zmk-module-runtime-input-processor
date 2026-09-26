@@ -132,3 +132,61 @@ properties:
   y-invert:
     type: boolean
     description: If present, invert Y axis values (positive becomes negative and vice versa)
+
+  inertia-enabled:
+    type: boolean
+    description: Enable inertia for this processor. Can also be changed in Studio.
+
+  inertia-window-ms:
+    type: int
+    default: 200
+    description: |
+      Sliding time window used to detect rapid input and measure input totals
+      after inertia starts, in milliseconds. Reports spanning multiple time
+      slices are distributed proportionally across them.
+
+  inertia-interval-ms:
+    type: int
+    default: 20
+    description: Interval between inertia events after it starts, in milliseconds.
+
+  inertia-threshold:
+    type: int
+    default: 12
+    description: |
+      Same-direction output amount after scaling that starts inertia inside
+      one time window. Subsequent speed measurements,
+      reverse movement, and generated inertia use input before scaling;
+      generated output is then scaled.
+
+  inertia-decay-percent:
+    type: int
+    default: 8
+    description: |
+      Percentage of retained inertia speed removed after each output
+      interval without new physical input. Decay multiplies the remaining
+      speed, producing an exponential tail. Zero holds speed and 100 stops
+      output after one further interval.
+
+  inertia-normal-max-output:
+    type: int
+    default: 0
+    description: |
+      Maximum synthetic output per interval in the normal inertia stage,
+      after scaling. Zero leaves normal output unlimited. The limit does not
+      apply once the fast stage starts.
+
+  inertia-fast-threshold:
+    type: int
+    default: 20
+    description: |
+      Second-stage input amount after scaling within the inertia window.
+      Zero disables fast output. Once crossed, fast output stays active until
+      that inertia run ends.
+
+  inertia-fast-output-percent:
+    type: int
+    default: 200
+    description: |
+      Percentage applied to retained target speed before subtracting physical input.
+      Valid values are 100 through 1000; 200 doubles the combined output target.

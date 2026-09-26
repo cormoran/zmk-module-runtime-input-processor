@@ -23,6 +23,7 @@ import {
   Notification,
   AxisSnapMode,
   WriteMode,
+  InertiaStopReason,
 } from "./proto/cormoran/rip/custom";
 
 // Custom subsystem identifier - must match firmware registration
@@ -33,6 +34,24 @@ export const GITHUB_REPO = "cormoran/zmk-module-runtime-input-processor";
 // Always credits the original template project this module was built from,
 // regardless of GITHUB_REPO above.
 export const TEMPLATE_CREDIT_REPO = "cormoran/zmk-module-template";
+const DEFAULT_INERTIA_THRESHOLD = 12;
+
+const INERTIA_STOP_LABELS: Record<InertiaStopReason, string> = {
+  [InertiaStopReason.INERTIA_STOP_REASON_UNSPECIFIED]: "",
+  [InertiaStopReason.INERTIA_STOP_REASON_SETTLED]: "no more scroll output",
+  [InertiaStopReason.INERTIA_STOP_REASON_REVERSE_INPUT]: "reverse input",
+  [InertiaStopReason.INERTIA_STOP_REASON_LAYER_INACTIVE]: "layer deactivated",
+  [InertiaStopReason.INERTIA_STOP_REASON_SETTINGS_CHANGED]: "settings changed",
+  [InertiaStopReason.UNRECOGNIZED]: "unknown reason",
+};
+
+// Keep this codec stable. useCustomSubsystem() memoizes its RPC functions from
+// the codec identity; recreating it while rendering would recreate the loaders
+// below and turn their effects into a reload loop.
+const RIP_CODEC = {
+  encode: (request: Request) => Request.encode(request).finish(),
+  decode: (payload: Uint8Array) => Response.decode(payload),
+};
 
 function App() {
   return (
@@ -192,6 +211,66 @@ export function InputProcessorManager() {
   // Axis invert state
   const [xInvert, setXInvert] = useState<boolean>(false);
   const [yInvert, setYInvert] = useState<boolean>(false);
+  // Inertia settings.
+  const [inertiaWindowMs, setInertiaWindowMs] = useState<number>(200);
+  const [inertiaIntervalMs, setInertiaIntervalMs] = useState<number>(20);
+  const [inertiaEnabled, setInertiaEnabled] = useState<boolean>(true);
+  const [inertiaThreshold, setInertiaThreshold] = useState<string>(
+    String(DEFAULT_INERTIA_THRESHOLD)
+  );
+  const [inertiaDecayPercent, setInertiaDecayPercent] = useState<number>(8);
+  const [inertiaNormalMaxOutput, setInertiaNormalMaxOutput] =
+    useState<number>(0);
+  const [inertiaFastThreshold, setInertiaFastThreshold] = useState<number>(0);
+  const [inertiaFastOutputPercent, setInertiaFastOutputPercent] =
+    useState<string>("200");
+  const [inertiaNotificationsEnabled, setInertiaNotificationsEnabled] =
+    useState(false);
+  const [inertiaActive, setInertiaActive] = useState(false);
+  const [inertiaFastInput, setInertiaFastInput] = useState(false);
+  const [inertiaStopReason, setInertiaStopReason] = useState<InertiaStopReason>(
+    InertiaStopReason.INERTIA_STOP_REASON_UNSPECIFIED
+  );
+  const [verticalScrollEnabled, setVerticalScrollEnabled] = useState(true);
+  const [horizontalScrollEnabled, setHorizontalScrollEnabled] = useState(true);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const scrollTileWidth = 640;
+  const scrollTileHeight = 480;
+  const centerScrollArea = useCallback(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollLeft = scrollTileWidth;
+      scrollAreaRef.current.scrollTop = scrollTileHeight;
+    }
+  }, []);
+  const handleTuningScroll = useCallback(() => {
+    const area = scrollAreaRef.current;
+    if (!area) return;
+    if (horizontalScrollEnabled) {
+      if (area.scrollLeft < scrollTileWidth / 2)
+        area.scrollLeft += scrollTileWidth;
+      if (area.scrollLeft >= scrollTileWidth * 1.5)
+        area.scrollLeft -= scrollTileWidth;
+    } else {
+      area.scrollLeft = scrollTileWidth;
+    }
+    if (verticalScrollEnabled) {
+      if (area.scrollTop < scrollTileHeight / 2)
+        area.scrollTop += scrollTileHeight;
+      if (area.scrollTop >= scrollTileHeight * 1.5)
+        area.scrollTop -= scrollTileHeight;
+    } else {
+      area.scrollTop = scrollTileHeight;
+    }
+  }, [horizontalScrollEnabled, verticalScrollEnabled]);
+  useEffect(() => {
+    centerScrollArea();
+  }, [selectedProcessorId, centerScrollArea]);
+  const loadInertiaThreshold = useCallback((proc: InputProcessorInfo) => {
+    setInertiaEnabled(proc.inertiaEnabled);
+    setInertiaThreshold(
+      String(proc.inertiaThreshold || DEFAULT_INERTIA_THRESHOLD)
+    );
+  }, []);
 
   // Where "Apply Settings" stores values: persist to flash (default) or keep
   // in memory only (lost on reboot until saved). Mirrors the custom-settings
@@ -200,10 +279,13 @@ export function InputProcessorManager() {
     WriteMode.WRITE_MODE_PERSIST
   );
 
-  const { ready, subsystem, call } = useCustomSubsystem(SUBSYSTEM_IDENTIFIER, {
-    encode: (r: Request) => Request.encode(r).finish(),
-    decode: Response.decode,
-  });
+  const { ready, subsystem, call } = useCustomSubsystem(
+    SUBSYSTEM_IDENTIFIER,
+    RIP_CODEC
+  );
+  // useZMKApp.findSubsystem() deliberately returns a fresh object. Depend on
+  // the stable index rather than its object identity in effects below.
+  const subsystemIndex = subsystem?.index ?? null;
   const { locked } = useStudioLockState();
 
   // Studio's unlock requirement is per-request: when a mutating/reading call
@@ -545,6 +627,164 @@ export function InputProcessorManager() {
         }
       }
 
+      if (currentProcessor.inertiaWindowMs !== inertiaWindowMs) {
+        const inertiaWindowRequest = Request.create({
+          setInertiaWindow: {
+            id: selectedProcessorId,
+            writeMode,
+            windowMs: inertiaWindowMs,
+          },
+        });
+        const inertiaWindowResp = await callRPC(inertiaWindowRequest);
+        if (inertiaWindowResp?.error) {
+          setError(inertiaWindowResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      if (currentProcessor.inertiaIntervalMs !== inertiaIntervalMs) {
+        const inertiaIntervalRequest = Request.create({
+          setInertiaInterval: {
+            id: selectedProcessorId,
+            writeMode,
+            intervalMs: inertiaIntervalMs,
+          },
+        });
+        const inertiaIntervalResp = await callRPC(inertiaIntervalRequest);
+        if (inertiaIntervalResp?.error) {
+          setError(inertiaIntervalResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const effectiveInertiaThreshold = Math.min(
+        65535,
+        Math.max(1, parseInt(inertiaThreshold, 10) || DEFAULT_INERTIA_THRESHOLD)
+      );
+      if (currentProcessor.inertiaThreshold !== effectiveInertiaThreshold) {
+        const inertiaThresholdRequest = Request.create({
+          setInertiaThreshold: {
+            id: selectedProcessorId,
+            writeMode,
+            threshold: effectiveInertiaThreshold,
+          },
+        });
+        const inertiaThresholdResp = await callRPC(inertiaThresholdRequest);
+        if (inertiaThresholdResp?.error) {
+          setError(inertiaThresholdResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+        setProcessors((previous) =>
+          previous.map((proc) =>
+            proc.id === selectedProcessorId
+              ? { ...proc, inertiaThreshold: effectiveInertiaThreshold }
+              : proc
+          )
+        );
+      }
+
+      if (currentProcessor.inertiaEnabled !== inertiaEnabled) {
+        const response = await callRPC(
+          Request.create({
+            setInertiaEnabled: {
+              id: selectedProcessorId,
+              writeMode,
+              enabled: inertiaEnabled,
+            },
+          })
+        );
+        if (response?.error) {
+          setError(response.error.message);
+          setIsLoading(false);
+          return;
+        }
+        setProcessors((previous) =>
+          previous.map((proc) =>
+            proc.id === selectedProcessorId ? { ...proc, inertiaEnabled } : proc
+          )
+        );
+      }
+
+      if (currentProcessor.inertiaDecayPercent !== inertiaDecayPercent) {
+        const inertiaDecayRequest = Request.create({
+          setInertiaDecay: {
+            id: selectedProcessorId,
+            writeMode,
+            decayPercent: inertiaDecayPercent,
+          },
+        });
+        const inertiaDecayResp = await callRPC(inertiaDecayRequest);
+        if (inertiaDecayResp?.error) {
+          setError(inertiaDecayResp.error.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      if (currentProcessor.inertiaNormalMaxOutput !== inertiaNormalMaxOutput) {
+        const response = await callRPC(
+          Request.create({
+            setInertiaNormalMaxOutput: {
+              id: selectedProcessorId,
+              writeMode,
+              maxOutput: inertiaNormalMaxOutput,
+            },
+          })
+        );
+        if (response?.error) {
+          setError(response.error.message);
+          return;
+        }
+        setProcessors((previous) =>
+          previous.map((proc) =>
+            proc.id === selectedProcessorId
+              ? { ...proc, inertiaNormalMaxOutput }
+              : proc
+          )
+        );
+      }
+
+      if (currentProcessor.inertiaFastThreshold !== inertiaFastThreshold) {
+        const response = await callRPC(
+          Request.create({
+            setInertiaFastThreshold: {
+              id: selectedProcessorId,
+              writeMode,
+              threshold: inertiaFastThreshold,
+            },
+          })
+        );
+        if (response?.error) {
+          setError(response.error.message);
+          return;
+        }
+      }
+
+      const effectiveFastOutputPercent = Math.min(
+        1000,
+        Math.max(100, parseInt(inertiaFastOutputPercent, 10) || 200)
+      );
+      if (
+        currentProcessor.inertiaFastOutputPercent !== effectiveFastOutputPercent
+      ) {
+        const response = await callRPC(
+          Request.create({
+            setInertiaFastOutputPercent: {
+              id: selectedProcessorId,
+              writeMode,
+              percent: effectiveFastOutputPercent,
+            },
+          })
+        );
+        if (response?.error) {
+          setError(response.error.message);
+          return;
+        }
+      }
+
       // Updates will come via notifications
     } catch (err) {
       if (isUnlockRequiredError(err)) {
@@ -580,6 +820,14 @@ export function InputProcessorManager() {
     xySwapEnabled,
     xInvert,
     yInvert,
+    inertiaWindowMs,
+    inertiaIntervalMs,
+    inertiaEnabled,
+    inertiaThreshold,
+    inertiaDecayPercent,
+    inertiaNormalMaxOutput,
+    inertiaFastThreshold,
+    inertiaFastOutputPercent,
     writeMode,
   ]);
 
@@ -641,18 +889,30 @@ export function InputProcessorManager() {
         setXySwapEnabled(proc.xySwapEnabled);
         setXInvert(proc.xInvert);
         setYInvert(proc.yInvert);
+        setInertiaWindowMs(proc.inertiaWindowMs);
+        setInertiaIntervalMs(proc.inertiaIntervalMs);
+        loadInertiaThreshold(proc);
+        setInertiaDecayPercent(proc.inertiaDecayPercent);
+        setInertiaNormalMaxOutput(proc.inertiaNormalMaxOutput);
+        setInertiaFastThreshold(proc.inertiaFastThreshold);
+        setInertiaFastOutputPercent(
+          String(proc.inertiaFastOutputPercent || 200)
+        );
+        setInertiaNotificationsEnabled(proc.inertiaNotificationsEnabled);
+        setInertiaActive(proc.inertiaActive);
+        setInertiaFastInput(false);
+        setInertiaStopReason(InertiaStopReason.INERTIA_STOP_REASON_UNSPECIFIED);
       }
     },
-    [processors]
+    [processors, loadInertiaThreshold]
   );
 
   useEffect(() => {
-    if (subsystem) {
-      loadProcessors();
-      loadLayerInfo();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subsystem]);
+    if (subsystemIndex === null) return;
+
+    void loadProcessors();
+    void loadLayerInfo();
+  }, [subsystemIndex, loadProcessors, loadLayerInfo]);
 
   // Auto-retry once the device reports it's unlocked again -- covers the
   // common case where the user presses &studio_unlock after seeing the
@@ -668,15 +928,29 @@ export function InputProcessorManager() {
 
   // Subscribe to notifications for processor changes
   useEffect(() => {
-    if (!zmkApp || !subsystem) return;
+    if (!zmkApp || subsystemIndex === null) return;
 
     const unsubscribe = zmkApp.onNotification({
       type: "custom",
-      subsystemIndex: subsystem.index,
+      subsystemIndex,
       callback: (notification) => {
         try {
           // notification.payload contains the encoded Notification message
           const decoded = Notification.decode(notification.payload);
+          if (
+            decoded.inertiaStateChanged &&
+            decoded.inertiaStateChanged.id === selectedProcessorId
+          ) {
+            setInertiaActive(decoded.inertiaStateChanged.active);
+            setInertiaStopReason(decoded.inertiaStateChanged.stopReason);
+            if (!decoded.inertiaStateChanged.active) setInertiaFastInput(false);
+          }
+          if (
+            decoded.inertiaFastInputChanged &&
+            decoded.inertiaFastInputChanged.id === selectedProcessorId
+          ) {
+            setInertiaFastInput(decoded.inertiaFastInputChanged.fastInput);
+          }
           if (decoded.inputProcessorChanged?.processor) {
             const proc = decoded.inputProcessorChanged.processor;
 
@@ -712,6 +986,18 @@ export function InputProcessorManager() {
               setXySwapEnabled(proc.xySwapEnabled);
               setXInvert(proc.xInvert);
               setYInvert(proc.yInvert);
+              setInertiaWindowMs(proc.inertiaWindowMs);
+              setInertiaIntervalMs(proc.inertiaIntervalMs);
+              loadInertiaThreshold(proc);
+              setInertiaDecayPercent(proc.inertiaDecayPercent);
+              setInertiaNormalMaxOutput(proc.inertiaNormalMaxOutput);
+              setInertiaFastThreshold(proc.inertiaFastThreshold);
+              setInertiaFastOutputPercent(
+                String(proc.inertiaFastOutputPercent || 200)
+              );
+              setInertiaNotificationsEnabled(proc.inertiaNotificationsEnabled);
+              setInertiaActive(proc.inertiaActive);
+              if (!proc.inertiaActive) setInertiaFastInput(false);
             }
 
             // If no processor is selected yet, select the first one
@@ -732,6 +1018,18 @@ export function InputProcessorManager() {
               setXySwapEnabled(proc.xySwapEnabled);
               setXInvert(proc.xInvert);
               setYInvert(proc.yInvert);
+              setInertiaWindowMs(proc.inertiaWindowMs);
+              setInertiaIntervalMs(proc.inertiaIntervalMs);
+              loadInertiaThreshold(proc);
+              setInertiaDecayPercent(proc.inertiaDecayPercent);
+              setInertiaNormalMaxOutput(proc.inertiaNormalMaxOutput);
+              setInertiaFastThreshold(proc.inertiaFastThreshold);
+              setInertiaFastOutputPercent(
+                String(proc.inertiaFastOutputPercent || 200)
+              );
+              setInertiaNotificationsEnabled(proc.inertiaNotificationsEnabled);
+              setInertiaActive(proc.inertiaActive);
+              setInertiaFastInput(false);
             }
           }
         } catch (err) {
@@ -741,7 +1039,13 @@ export function InputProcessorManager() {
     });
 
     return unsubscribe;
-  }, [zmkApp, subsystem, selectedProcessorId, isUpdating]);
+  }, [
+    zmkApp,
+    subsystemIndex,
+    selectedProcessorId,
+    isUpdating,
+    loadInertiaThreshold,
+  ]);
 
   if (!zmkApp) return null;
 
@@ -1323,6 +1627,335 @@ export function InputProcessorManager() {
               Reverse vertical input direction
             </div>
           </div>
+
+          <hr style={{ margin: "1.5rem 0", border: "1px solid #e0e0e0" }} />
+
+          <h3>Inertia</h3>
+          <p style={{ fontSize: "0.9em", color: "#666", marginBottom: "1rem" }}>
+            After same-direction input reaches the threshold within one time
+            window, the processor emits inertia. A strong trackball scroll
+            raises the retained speed.
+          </p>
+
+          <div className="input-group">
+            <label htmlFor="inertia-enabled">
+              <input
+                id="inertia-enabled"
+                type="checkbox"
+                checked={inertiaEnabled}
+                onChange={(e) => setInertiaEnabled(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Enable Inertia
+            </label>
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              Turning this off keeps the threshold below. Press Apply Settings
+              to send the change.
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="inertia-window-ms">Measurement Window (ms):</label>
+            <input
+              id="inertia-window-ms"
+              type="number"
+              min="1"
+              max="60000"
+              step="1"
+              value={inertiaWindowMs}
+              onChange={(e) =>
+                setInertiaWindowMs(
+                  Math.min(60000, Math.max(1, parseInt(e.target.value) || 1))
+                )
+              }
+            />
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              Input is accumulated over this duration for triggering and sliding
+              speed measurement.
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="inertia-interval-ms">Output Interval (ms):</label>
+            <input
+              id="inertia-interval-ms"
+              type="number"
+              min="1"
+              max="60000"
+              step="1"
+              value={inertiaIntervalMs}
+              onChange={(e) =>
+                setInertiaIntervalMs(
+                  Math.min(60000, Math.max(1, parseInt(e.target.value) || 1))
+                )
+              }
+            />
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              Inertia is emitted at this cadence. Each output is scaled by
+              interval ÷ measurement window.
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="inertia-threshold">
+              Input Threshold (when enabled):
+            </label>
+            <input
+              id="inertia-threshold"
+              type="number"
+              min="1"
+              max="65535"
+              step="1"
+              value={inertiaThreshold}
+              onChange={(e) => setInertiaThreshold(e.target.value)}
+            />
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              {!inertiaEnabled
+                ? "Inertia is off. This threshold will be used when enabled."
+                : "Threshold is measured after scaling. Reverse input uses raw counts; its limit is set in firmware Kconfig."}
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="inertia-decay-percent">
+              Decay per Output Interval (%):
+            </label>
+            <input
+              id="inertia-decay-percent"
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={inertiaDecayPercent}
+              onChange={(e) =>
+                setInertiaDecayPercent(
+                  Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
+                )
+              }
+            />
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              Percentage removed from the remaining speed after each output
+              interval without new input, producing exponential decay. 0 keeps
+              the speed; 100 stops after one more interval.
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="inertia-normal-max-output">
+              Normal Output Limit (per interval):
+            </label>
+            <input
+              id="inertia-normal-max-output"
+              type="number"
+              min="0"
+              max="32767"
+              step="1"
+              value={inertiaNormalMaxOutput}
+              onChange={(e) =>
+                setInertiaNormalMaxOutput(
+                  Math.min(
+                    32767,
+                    Math.max(0, parseInt(e.target.value, 10) || 0)
+                  )
+                )
+              }
+            />
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              Caps each generated output in normal inertia. Zero is unlimited.
+              Fast mode ignores this limit.
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="inertia-fast-threshold">
+              Fast Input Threshold:
+            </label>
+            <input
+              id="inertia-fast-threshold"
+              type="number"
+              min="0"
+              max="65535"
+              step="1"
+              value={inertiaFastThreshold}
+              onChange={(e) =>
+                setInertiaFastThreshold(
+                  Math.min(
+                    65535,
+                    Math.max(0, parseInt(e.target.value, 10) || 0)
+                  )
+                )
+              }
+            />
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              Second-stage threshold in scaled input counts over the same
+              window. Zero disables fast scrolling. The boost stays on until
+              inertia ends.
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="inertia-fast-output-percent">
+              Fast Output (%):
+            </label>
+            <input
+              id="inertia-fast-output-percent"
+              type="number"
+              min="100"
+              max="1000"
+              step="1"
+              value={inertiaFastOutputPercent}
+              onChange={(e) => setInertiaFastOutputPercent(e.target.value)}
+            />
+            <div
+              style={{
+                fontSize: "0.85em",
+                color: "#666",
+                marginTop: "0.25rem",
+              }}
+            >
+              Multiplies the combined physical and inertia output target; 200%
+              targets twice the retained speed.
+            </div>
+          </div>
+
+          <section className="inertia-tuning">
+            <h3>Scroll tuning area</h3>
+            <p>
+              Move the trackball here to feel the scrolling response. The area
+              repeats in every direction.
+            </p>
+            <div className="inertia-tuning-controls">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={verticalScrollEnabled}
+                  onChange={(event) =>
+                    setVerticalScrollEnabled(event.target.checked)
+                  }
+                />{" "}
+                Vertical scroll
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={horizontalScrollEnabled}
+                  onChange={(event) =>
+                    setHorizontalScrollEnabled(event.target.checked)
+                  }
+                />{" "}
+                Horizontal scroll
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={inertiaNotificationsEnabled}
+                  onChange={async (event) => {
+                    if (selectedProcessorId === null) return;
+                    const enabled = event.target.checked;
+                    try {
+                      const response = await callRPC(
+                        Request.create({
+                          setInertiaNotifications: {
+                            id: selectedProcessorId,
+                            enabled,
+                          },
+                        })
+                      );
+                      if (response?.error) {
+                        setError(response.error.message);
+                        return;
+                      }
+                      setInertiaNotificationsEnabled(enabled);
+                      if (!enabled) {
+                        setInertiaActive(false);
+                        setInertiaFastInput(false);
+                      }
+                    } catch (error) {
+                      setError(
+                        error instanceof Error ? error.message : String(error)
+                      );
+                    }
+                  }}
+                />{" "}
+                Show inertia activity
+              </label>
+            </div>
+            <div
+              ref={scrollAreaRef}
+              className={`inertia-scroll-area${inertiaActive && inertiaNotificationsEnabled ? (inertiaFastInput ? " inertia-scroll-area-fast" : " inertia-scroll-area-active") : ""}`}
+              role="region"
+              aria-label="Infinite scroll tuning area"
+              style={{
+                overflowX: horizontalScrollEnabled ? "auto" : "hidden",
+                overflowY: verticalScrollEnabled ? "auto" : "hidden",
+              }}
+              onScroll={handleTuningScroll}
+            >
+              <div className="inertia-scroll-grid">
+                {Array.from({ length: 9 }, (_, index) => (
+                  <div className="inertia-scroll-tile" key={index}>
+                    {Array.from({ length: 8 }, (_, line) => (
+                      <p key={line}>
+                        ↕ ↔ Scroll test · line {line + 1} · Trackball inertia
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <span className="inertia-activity-label" aria-live="polite">
+              Inertia:{" "}
+              {inertiaNotificationsEnabled
+                ? inertiaActive
+                  ? inertiaFastInput
+                    ? "fast input"
+                    : "active"
+                  : `stopped${INERTIA_STOP_LABELS[inertiaStopReason] ? ` (${INERTIA_STOP_LABELS[inertiaStopReason]})` : ""}`
+                : "activity display off"}
+            </span>
+          </section>
 
           <div className="form-group" style={{ marginTop: "1rem" }}>
             <label htmlFor="write-mode-select">Storage</label>
