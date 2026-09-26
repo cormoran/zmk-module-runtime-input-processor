@@ -449,6 +449,7 @@ int zmk_input_processor_runtime_test_apply_legacy_v2(const struct device *dev);
 
 /** @brief Test-only: verify timed report splitting and rolling expiration. */
 int zmk_input_processor_runtime_test_inertia_sliding_window(void);
+int zmk_input_processor_runtime_test_inertia_latest_bucket(void);
 
 /**
  * @brief Test-only: force a processor's pending debounced settings save to
@@ -474,6 +475,8 @@ void zmk_input_processor_runtime_test_apply_persisted_settings(void);
  * input event, returning the value that would be emitted.
  */
 int zmk_input_processor_runtime_test_inertia_tick(const struct device *dev, int16_t *value);
+int zmk_input_processor_runtime_test_inertia_tick_at(const struct device *dev, int64_t now,
+                                                     int16_t *value);
 
 /** @brief Test-only: report whether the processor is in inertia mode. */
 bool zmk_input_processor_runtime_test_inertia_active(const struct device *dev);

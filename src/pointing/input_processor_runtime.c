@@ -468,7 +468,7 @@ int zmk_input_processor_runtime_test_inertia_sliding_window(void) {
 
 /* Finish one output interval. Speed and the rolling window use input before
  * scaling; apply scale only when producing synthetic output. */
-static int16_t inertia_finish_interval(struct runtime_processor_data *data) {
+static int16_t inertia_finish_interval(struct runtime_processor_data *data, int64_t now) {
     if (!data->inertia_active || data->inertia_window_ms == 0 ||
         data->inertia_interval_ms == 0) {
         return 0;
@@ -480,7 +480,32 @@ static int16_t inertia_finish_interval(struct runtime_processor_data *data) {
 
     uint64_t denominator = (uint64_t)data->inertia_window_ms <<
                            INERTIA_SPEED_FRACTION_BITS;
-    uint64_t numerator = data->inertia_speed_q16 * data->inertia_interval_ms +
+    /* Physical reports already pass through to the endpoint. Estimate their
+     * current rate from the latest bucket, rather than the whole window, so
+     * inertia can take over promptly when physical motion slows or stops.
+     * Convert the bucket to window units before subtracting the retained peak. */
+    uint32_t bucket_ms = inertia_bucket_ms(data->inertia_window_ms);
+    const struct inertia_trigger_state *measurement = &data->inertia_measurement;
+    uint64_t physical_q16 = 0;
+    if (measurement->has_report && now - measurement->last_report_ms < bucket_ms) {
+        int64_t bucket_number = measurement->last_report_ms / bucket_ms;
+        size_t slot = bucket_number % INERTIA_BUCKETS;
+        /* Distributed reports end just before last_report_ms; at an exact
+         * boundary their latest populated bucket is the preceding one. */
+        if (bucket_number > 0 &&
+            (measurement->bucket_number[slot] != bucket_number ||
+             measurement->bucket_q16[slot] == 0)) {
+            bucket_number--;
+            slot = bucket_number % INERTIA_BUCKETS;
+        }
+        if (measurement->bucket_number[slot] == bucket_number) {
+            physical_q16 = measurement->bucket_q16[slot] * data->inertia_window_ms / bucket_ms;
+        }
+    }
+    uint64_t supplemental_q16 = data->inertia_speed_q16 > physical_q16
+                                    ? data->inertia_speed_q16 - physical_q16
+                                    : 0;
+    uint64_t numerator = supplemental_q16 * data->inertia_interval_ms +
                          data->inertia_output_remainder;
     uint64_t raw_amount = numerator / denominator;
     data->inertia_output_remainder = numerator % denominator;
@@ -535,6 +560,80 @@ static int16_t inertia_finish_interval(struct runtime_processor_data *data) {
     return output;
 }
 
+#if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_TEST)
+int zmk_input_processor_runtime_test_inertia_latest_bucket(void) {
+    struct runtime_processor_data data = {
+        .inertia_active = true,
+        .inertia_window_ms = 100,
+        .inertia_interval_ms = 20,
+        .inertia_direction = 1,
+        .inertia_speed_q16 = 100ULL << INERTIA_SPEED_FRACTION_BITS,
+        .scale_multiplier = 1,
+        .scale_divisor = 1,
+    };
+    uint32_t bucket_ms = inertia_bucket_ms(data.inertia_window_ms);
+    int64_t now = 1000 * bucket_ms;
+    /* Older input remains in the window, but only the latest bucket offsets
+     * inertia. Its rate is 40 window counts, leaving 60 * 20/100 = 12. */
+    inertia_add_report(&data.inertia_measurement, 100, now - bucket_ms, 100);
+    inertia_add_report(&data.inertia_measurement, 1, now, 100);
+    size_t slot = (now / bucket_ms) % INERTIA_BUCKETS;
+    data.inertia_measurement.bucket_number[slot] = now / bucket_ms;
+    data.inertia_measurement.bucket_q16[slot] =
+        (40ULL * bucket_ms << INERTIA_SPEED_FRACTION_BITS) / 100;
+    if (inertia_finish_interval(&data, now) != 12) {
+        return -EINVAL;
+    }
+    /* A report ending exactly on a bucket boundary populated the preceding
+     * bucket, which is still the latest measurement for this tick. */
+    size_t previous_slot = (slot + INERTIA_BUCKETS - 1) % INERTIA_BUCKETS;
+    data.inertia_measurement.bucket_number[previous_slot] = now / bucket_ms - 1;
+    data.inertia_measurement.bucket_q16[previous_slot] = data.inertia_measurement.bucket_q16[slot];
+    data.inertia_measurement.bucket_q16[slot] = 0;
+    if (inertia_finish_interval(&data, now) != 12) {
+        return -EINVAL;
+    }
+    data.inertia_measurement.bucket_q16[slot] = data.inertia_measurement.bucket_q16[previous_slot];
+    data.inertia_direction = -1;
+    if (inertia_finish_interval(&data, now) != -12) {
+        return -EINVAL;
+    }
+    /* Equal/faster physical input never produces opposite inertia. */
+    data.inertia_measurement.bucket_q16[slot] =
+        (100ULL * bucket_ms << INERTIA_SPEED_FRACTION_BITS) / 100;
+    if (inertia_finish_interval(&data, now) != 0) {
+        return -EINVAL;
+    }
+    data.inertia_measurement.bucket_q16[slot] *= 2;
+    if (inertia_finish_interval(&data, now) != 0) {
+        return -EINVAL;
+    }
+    /* A new empty bucket hands output back to inertia immediately, even
+     * though those physical reports remain in the full measurement window. */
+    if (inertia_finish_interval(&data, now + bucket_ms) != -20) {
+        return -EINVAL;
+    }
+    data.inertia_direction = 1;
+    data.inertia_fast_active = true;
+    data.inertia_fast_output_percent = 200;
+    data.inertia_measurement.bucket_q16[slot] =
+        (40ULL * bucket_ms << INERTIA_SPEED_FRACTION_BITS) / 100;
+    if (inertia_finish_interval(&data, now) != 24) {
+        return -EINVAL;
+    }
+    data.inertia_fast_active = false;
+    data.scale_divisor = 60;
+    int total = 0;
+    for (int i = 0; i < 5; i++) {
+        total += inertia_finish_interval(&data, now);
+    }
+    if (total != 1) {
+        return -EINVAL;
+    }
+    return 0;
+}
+#endif
+
 /* Inertia is already in its final, processor-transformed coordinate
  * system. Do not inject it back into the source input device: that would send
  * it through every input processor again, allowing a later processor to turn
@@ -582,7 +681,7 @@ static void inertia_work_handler(struct k_work *work) {
         return;
     }
 
-    int16_t output = inertia_finish_interval(data);
+    int16_t output = inertia_finish_interval(data, k_uptime_get());
     if (output != 0) {
         inertia_emit(data->inertia_output_code, output);
         LOG_DBG("Inertia emitted %d every %u ms", output, data->inertia_interval_ms);
@@ -1858,7 +1957,16 @@ int zmk_input_processor_runtime_test_inertia_tick(const struct device *dev, int1
     if (!dev || !value) {
         return -EINVAL;
     }
-    *value = inertia_finish_interval(dev->data);
+    *value = inertia_finish_interval(dev->data, k_uptime_get());
+    return 0;
+}
+
+int zmk_input_processor_runtime_test_inertia_tick_at(const struct device *dev, int64_t now,
+                                                     int16_t *value) {
+    if (!dev || !value) {
+        return -EINVAL;
+    }
+    *value = inertia_finish_interval(dev->data, now);
     return 0;
 }
 

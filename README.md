@@ -205,10 +205,13 @@ and the setters take a `zmk_input_processor_runtime_write_mode`
   - `inertia-fast-output-percent` (default `200`) multiplies synthetic output
     after normal scale in fast mode. `200` means twice the normal output.
   - The movement that triggers entry sets the initial speed. Each interval
-    emits the retained sliding-window total scaled as
-    `retained_raw_amount * interval_ms / window_ms`, then applies normal scale
+    emits only the gap between the retained peak and the physical input rate
+    in the latest measurement bucket. In window
+    units this is `max(retained_raw_amount - latest_bucket_raw_amount *
+    window_ms / bucket_ms, 0) * interval_ms / window_ms`, then applies normal scale
     and any fast output percentage. Fractional output carries into later
-    intervals so slow speeds still move
+    intervals so slow speeds still move. A latest bucket older than its
+    duration counts as zero physical input
   - Reverse movement totaling `clamp(threshold / 2, reverse_min, reverse_max)`
     within one measurement window exits inertia; isolated reverse counts are
     ignored. `reverse_min` and `reverse_max` default to `3` and `12` in Kconfig
