@@ -502,9 +502,16 @@ static int16_t inertia_finish_interval(struct runtime_processor_data *data, int6
             physical_q16 = measurement->bucket_q16[slot] * data->inertia_window_ms / bucket_ms;
         }
     }
-    uint64_t supplemental_q16 = data->inertia_speed_q16 > physical_q16
-                                    ? data->inertia_speed_q16 - physical_q16
-                                    : 0;
+    /* Fast mode raises the total target, not just the supplemental output:
+     * physical + inertia = retained peak * fast percentage. */
+    uint64_t target_q16 = data->inertia_speed_q16;
+    if (data->inertia_fast_active) {
+        uint64_t fast_numerator = target_q16 * data->inertia_fast_output_percent +
+                                  data->inertia_fast_remainder;
+        target_q16 = fast_numerator / 100U;
+        data->inertia_fast_remainder = fast_numerator % 100U;
+    }
+    uint64_t supplemental_q16 = target_q16 > physical_q16 ? target_q16 - physical_q16 : 0;
     uint64_t numerator = supplemental_q16 * data->inertia_interval_ms +
                          data->inertia_output_remainder;
     uint64_t raw_amount = numerator / denominator;
@@ -521,12 +528,6 @@ static int16_t inertia_finish_interval(struct runtime_processor_data *data, int6
     scaled_amount = MIN(scaled_amount, (uint64_t)INT16_MAX);
     if (!data->inertia_fast_active && data->inertia_normal_max_output > 0) {
         scaled_amount = MIN(scaled_amount, (uint64_t)data->inertia_normal_max_output);
-    }
-    if (data->inertia_fast_active) {
-        uint64_t fast_numerator = scaled_amount * data->inertia_fast_output_percent +
-                                  data->inertia_fast_remainder;
-        scaled_amount = fast_numerator / 100U;
-        data->inertia_fast_remainder = fast_numerator % 100U;
     }
     if (scaled_amount > INT16_MAX) {
         scaled_amount = INT16_MAX;
@@ -550,7 +551,9 @@ static int16_t inertia_finish_interval(struct runtime_processor_data *data, int6
         uint64_t raw_needed =
             ((uint64_t)divisor - data->inertia_scale_remainder + multiplier - 1) / multiplier;
         uint64_t missing_q16 = raw_needed * denominator - data->inertia_output_remainder;
-        uint64_t future_numerator = data->inertia_speed_q16 * data->inertia_interval_ms * 100U;
+        uint32_t output_percent = data->inertia_fast_active ? data->inertia_fast_output_percent : 100U;
+        uint64_t future_numerator = data->inertia_speed_q16 * data->inertia_interval_ms *
+                                    output_percent;
         if (missing_q16 > UINT64_MAX / data->inertia_decay_percent ||
             future_numerator < missing_q16 * data->inertia_decay_percent) {
             inertia_stop(data, ZMK_INPUT_PROCESSOR_INERTIA_STOP_REASON_SETTLED);
@@ -618,9 +621,27 @@ int zmk_input_processor_runtime_test_inertia_latest_bucket(void) {
     data.inertia_fast_output_percent = 200;
     data.inertia_measurement.bucket_q16[slot] =
         (40ULL * bucket_ms << INERTIA_SPEED_FRACTION_BITS) / 100;
-    if (inertia_finish_interval(&data, now) != 24) {
+    if (inertia_finish_interval(&data, now) != 32) {
         return -EINVAL;
     }
+    /* At the doubled target, physical input leaves no supplemental output. */
+    data.inertia_measurement.bucket_q16[slot] =
+        (200ULL * bucket_ms << INERTIA_SPEED_FRACTION_BITS) / 100;
+    if (inertia_finish_interval(&data, now) != 0) {
+        return -EINVAL;
+    }
+    data.inertia_measurement.bucket_q16[slot] *= 2;
+    if (inertia_finish_interval(&data, now) != 0) {
+        return -EINVAL;
+    }
+    data.inertia_measurement.bucket_q16[slot] =
+        (40ULL * bucket_ms << INERTIA_SPEED_FRACTION_BITS) / 100;
+    data.inertia_direction = -1;
+    if (inertia_finish_interval(&data, now) != -32 ||
+        inertia_finish_interval(&data, now + bucket_ms) != -40) {
+        return -EINVAL;
+    }
+    data.inertia_direction = 1;
     data.inertia_fast_active = false;
     data.scale_divisor = 60;
     int total = 0;

@@ -202,14 +202,16 @@ and the setters take a `zmk_input_processor_runtime_write_mode`
   - `inertia-fast-threshold` (default `20`) is a second threshold in
     scaled input counts over the same window. Crossing it enables fast output
     for the rest of that inertia run.
-  - `inertia-fast-output-percent` (default `200`) multiplies synthetic output
-    after normal scale in fast mode. `200` means twice the normal output.
+  - `inertia-fast-output-percent` (default `200`) multiplies the retained
+    target speed in fast mode before subtracting physical input. `200` targets
+    twice the retained speed for the combined physical and inertia output.
   - The movement that triggers entry sets the initial speed. Each interval
     emits only the gap between the retained peak and the physical input rate
     in the latest measurement bucket. In window
     units this is `max(retained_raw_amount - latest_bucket_raw_amount *
     window_ms / bucket_ms, 0) * interval_ms / window_ms`, then applies normal scale
-    and any fast output percentage. Fractional output carries into later
+    (in fast mode, multiply `retained_raw_amount` by the fast percentage before
+    subtracting physical input). Fractional output carries into later
     intervals so slow speeds still move. A latest bucket older than its
     duration counts as zero physical input
   - Reverse movement totaling `clamp(threshold / 2, reverse_min, reverse_max)`
