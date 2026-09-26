@@ -1855,8 +1855,8 @@ export function InputProcessorManager() {
                 marginTop: "0.25rem",
               }}
             >
-              Multiplies generated inertia output after normal scale; 200%
-              doubles it.
+              Multiplies the combined physical and inertia output target; 200%
+              targets twice the retained speed.
             </div>
           </div>
 

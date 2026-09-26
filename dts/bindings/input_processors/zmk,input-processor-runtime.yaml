@@ -188,5 +188,5 @@ properties:
     type: int
     default: 200
     description: |
-      Percentage applied to synthetic inertia output in the second stage.
-      Valid values are 100 through 1000; 200 doubles the output.
+      Percentage applied to retained target speed before subtracting physical input.
+      Valid values are 100 through 1000; 200 doubles the combined output target.
