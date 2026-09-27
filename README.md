@@ -679,3 +679,13 @@ For more info on modules, you can read through through the
 and [ZMK's page on using modules](https://zmk.dev/docs/features/modules).
 [Zephyr's west manifest page](https://docs.zephyrproject.org/3.5.0/develop/west/manifest.html#west-manifests)
 may also be of use.
+
+## Acknowledgements
+
+Special thanks to the authors and maintainers of these projects for ideas that
+informed the input and inertia implementations in this module:
+
+- [ShiniNet/zmk-driver-iqs9151](https://github.com/ShiniNet/zmk-driver-iqs9151)
+- [sekigon-gonnoc/zmk-driver-iqs7211e](https://github.com/sekigon-gonnoc/zmk-driver-iqs7211e)
+- [razilyis/zmk-pmw3610-driver](https://github.com/razilyis/zmk-pmw3610-driver/tree/Dev-v0.4_inertial-scroll)
+- [amgskobo/zmk-input-inertia](https://github.com/amgskobo/zmk-input-inertia)
