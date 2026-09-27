@@ -9,9 +9,16 @@ if(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR)
     target_sources(app PRIVATE src/behaviors/behavior_input_processor_temp_layer_keep_active.c)
     target_sources(app PRIVATE src/behaviors/behavior_input_processor_axis_snap.c)
     target_sources(app PRIVATE src/events/input_processor_state_changed.c)
+    target_sources(app PRIVATE src/events/input_processor_inertia_state_changed.c)
 
     if(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_TEST)
         target_sources(app PRIVATE src/test/rip_settings_test.c)
+    endif()
+
+    # This is enabled only by the Renode test snippet. Keeping the transport
+    # in this module makes the standalone CI test manifest self-contained.
+    if(CONFIG_ZMK_RENODE_STUDIO_UART_TRANSPORT)
+        target_sources(app PRIVATE src/test/renode_uart_transport.c)
     endif()
 
     if(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC)

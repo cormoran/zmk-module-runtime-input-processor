@@ -58,8 +58,8 @@ class WestCommandsTests(unittest.TestCase):
             ],
             # Hardware-free Renode testing artifact (see README.md's
             # "Hardware-free Renode testing" section): built with the
-            # renode-studio-uart snippet from cormoran/zmk-west-commands (a
-            # test west dependency) instead of the real USB-carried
+            # renode-studio-uart snippet supplied by this module instead of
+            # the real USB-carried
             # studio-rpc-usb-uart snippet. Verify the snippet's Kconfig
             # actually took effect -- the Renode-only transport enabled, the
             # real USB-gated one and USB itself disabled.
@@ -76,7 +76,17 @@ class WestCommandsTests(unittest.TestCase):
         for artifact in artifacts_and_expected_config.keys():
             shutil.rmtree(self.BUILD_DIR / artifact, ignore_errors=True)
 
-        result = run_west(["zmk-build", "tests/zmk-config/config", "-m", "tests/zmk-config", ".", "-q"])
+        result = run_west([
+            "zmk-build",
+            "tests/zmk-config/config",
+            "-m",
+            "tests/zmk-config",
+            ".",
+            "--extra-module-auto-discovery",
+            "zmk-config",
+            "current",
+            "-q",
+        ])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
         for artifact, entries in artifacts_and_expected_config.items():

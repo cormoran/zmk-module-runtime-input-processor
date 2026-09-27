@@ -7,10 +7,15 @@
 
 #include <cormoran/rip/custom.pb.h>
 #include <pb_encode.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/input_processor_state_changed.h>
+#include <zmk/events/input_processor_inertia_state_changed.h>
+#include <zmk/pointing/input_processor_runtime.h>
 #include <zmk/studio/custom.h>
+#include <zmk/workqueue.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_INPUT_PROCESSOR_STUDIO_RPC)
@@ -83,6 +88,16 @@ static int input_processor_state_changed_listener(const zmk_event_t *eh) {
     info->xy_swap_enabled = ev->config.xy_swap_enabled;
     info->x_invert = ev->config.x_invert;
     info->y_invert = ev->config.y_invert;
+    info->inertia_interval_ms = ev->config.inertia_interval_ms;
+    info->inertia_threshold = ev->config.inertia_threshold;
+    info->inertia_window_ms = ev->config.inertia_window_ms;
+    info->inertia_decay_percent = ev->config.inertia_decay_percent;
+    info->inertia_normal_max_output = ev->config.inertia_normal_max_output;
+    info->inertia_fast_threshold = ev->config.inertia_fast_threshold;
+    info->inertia_fast_output_percent = ev->config.inertia_fast_output_percent;
+    info->inertia_enabled = ev->config.inertia_enabled;
+    info->inertia_notifications_enabled = ev->config.inertia_notifications_enabled;
+    info->inertia_active = ev->config.inertia_active;
 
     // Send notification via custom studio subsystem
     pb_callback_t encode_cb = {.funcs.encode = encode_notification, .arg = &notification};
@@ -98,6 +113,80 @@ static int input_processor_state_changed_listener(const zmk_event_t *eh) {
 
 ZMK_LISTENER(input_processor_state_listener, input_processor_state_changed_listener);
 ZMK_SUBSCRIPTION(input_processor_state_listener, zmk_input_processor_state_changed);
+
+/* Input processors run on Zephyr's small input thread stack. Encoding and
+ * sending a Studio notification there can overflow that stack. Queue the
+ * transition and do the RPC work on ZMK's low priority work queue instead.
+ * A FIFO preserves start/stop transitions even when they happen quickly. */
+struct inertia_state_notification {
+    const struct device *dev;
+    enum zmk_input_processor_inertia_state state;
+    enum zmk_input_processor_inertia_stop_reason stop_reason;
+};
+
+K_MSGQ_DEFINE(inertia_state_notifications, sizeof(struct inertia_state_notification), 32, 4);
+static atomic_t dropped_inertia_state_notifications;
+
+static void send_inertia_state_notifications(struct k_work *work) {
+    ARG_UNUSED(work);
+    struct inertia_state_notification state;
+    while (k_msgq_get(&inertia_state_notifications, &state, K_NO_WAIT) == 0) {
+        struct zmk_input_processor_runtime_config config;
+        if (zmk_input_processor_runtime_get_config(state.dev, NULL, &config) < 0 ||
+            !config.inertia_notifications_enabled) {
+            continue;
+        }
+        int id = zmk_input_processor_runtime_get_id(state.dev);
+        if (id < 0) {
+            continue;
+        }
+        cormoran_rip_Notification notification = cormoran_rip_Notification_init_zero;
+        if (state.state == ZMK_INPUT_PROCESSOR_INERTIA_FAST_INPUT_STARTED ||
+            state.state == ZMK_INPUT_PROCESSOR_INERTIA_FAST_INPUT_STOPPED) {
+            notification.which_notification_type =
+                cormoran_rip_Notification_inertia_fast_input_changed_tag;
+            notification.notification_type.inertia_fast_input_changed.id = id;
+            notification.notification_type.inertia_fast_input_changed.fast_input =
+                state.state == ZMK_INPUT_PROCESSOR_INERTIA_FAST_INPUT_STARTED;
+        } else {
+            notification.which_notification_type = cormoran_rip_Notification_inertia_state_changed_tag;
+            notification.notification_type.inertia_state_changed.id = id;
+            notification.notification_type.inertia_state_changed.active =
+                state.state == ZMK_INPUT_PROCESSOR_INERTIA_STARTED;
+            notification.notification_type.inertia_state_changed.stop_reason =
+                (cormoran_rip_InertiaStopReason)state.stop_reason;
+        }
+        pb_callback_t encode_cb = {.funcs.encode = encode_notification, .arg = &notification};
+        raise_zmk_studio_custom_notification((struct zmk_studio_custom_notification){
+            .subsystem_index = find_subsystem_index("cormoran_rip"), .encode_payload = encode_cb});
+    }
+    atomic_val_t dropped = atomic_set(&dropped_inertia_state_notifications, 0);
+    if (dropped > 0) {
+        LOG_WRN("Dropped %d inertia state notifications", dropped);
+    }
+}
+
+K_WORK_DEFINE(inertia_state_notification_work, send_inertia_state_notifications);
+
+static int input_processor_inertia_state_changed_listener(const zmk_event_t *eh) {
+    const struct zmk_input_processor_inertia_state_changed *ev =
+        as_zmk_input_processor_inertia_state_changed(eh);
+    if (!ev) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+    struct inertia_state_notification state = {
+        .dev = ev->dev, .state = ev->state, .stop_reason = ev->stop_reason};
+    if (k_msgq_put(&inertia_state_notifications, &state, K_NO_WAIT) < 0) {
+        atomic_inc(&dropped_inertia_state_notifications);
+    }
+    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &inertia_state_notification_work);
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(input_processor_inertia_state_listener,
+             input_processor_inertia_state_changed_listener);
+ZMK_SUBSCRIPTION(input_processor_inertia_state_listener,
+                 zmk_input_processor_inertia_state_changed);
 
 // NOTE: relay from peripheral is not required because all input-processors can
 // be defined in central side

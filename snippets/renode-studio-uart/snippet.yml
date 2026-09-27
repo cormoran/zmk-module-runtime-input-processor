@@ -1,0 +1,4 @@
+name: renode-studio-uart
+append:
+  EXTRA_DTC_OVERLAY_FILE: renode-studio-uart.overlay
+  EXTRA_CONF_FILE: renode-studio-uart.conf

@@ -328,3 +328,70 @@
     border-color: #e0a800;
   }
 }
+
+.inertia-tuning {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px solid #cad6e0;
+  border-radius: 8px;
+}
+
+.inertia-tuning h3 {
+  margin: 0 0 0.5rem;
+}
+.inertia-tuning p {
+  margin: 0.5rem 0;
+}
+.inertia-tuning-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin: 1rem 0;
+}
+.inertia-tuning-controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.inertia-scroll-area {
+  width: 100%;
+  height: 260px;
+  border: 2px solid #61758b;
+  border-radius: 6px;
+  background: #f1f6fb;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.inertia-scroll-area-active {
+  background: #b9efd5;
+  border-color: #12844d;
+}
+.inertia-scroll-area-fast {
+  background: #ffe0a3;
+  border-color: #c46a09;
+}
+.inertia-scroll-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 640px);
+  grid-template-rows: repeat(3, 480px);
+}
+.inertia-scroll-tile {
+  width: 640px;
+  height: 480px;
+  box-sizing: border-box;
+  padding: 1.5rem;
+  background-image:
+    linear-gradient(to right, #7d9bb040 1px, transparent 1px),
+    linear-gradient(to bottom, #7d9bb040 1px, transparent 1px);
+  background-size: 80px 60px;
+}
+.inertia-scroll-tile p {
+  white-space: nowrap;
+  margin: 1.3rem 0;
+  font-size: 1rem;
+}
+.inertia-activity-label {
+  display: block;
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
